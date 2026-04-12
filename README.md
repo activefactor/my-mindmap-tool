@@ -1,6 +1,8 @@
 # Mindmap Tool
 
-ブラウザで動くマインドマップ作成ツールです。インストール不要・サーバー不要で、ローカルファイルとして開いて使えます。
+[![Open App](https://img.shields.io/badge/Open%20App-GitHub%20Pages-blue?style=for-the-badge)](https://activefactor.github.io/my-mindmap-tool/)
+
+ブラウザで動くマインドマップ作成ツールです。インストール不要・サーバー不要で、すぐに使えます。
 
 ---
 
