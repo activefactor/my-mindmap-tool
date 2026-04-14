@@ -13,6 +13,7 @@ import { useAutoSave, loadFromStorage } from './hooks/useLocalStorage';
 import type { MindMapNode, ContextMenuState } from './types/mindmap';
 import { generateId } from './utils/generateId';
 import { nodeToText } from './utils/exportText';
+import { parseIndentText } from './utils/importText';
 import { exportPNG } from './utils/exportPNG';
 import { exportPDF } from './utils/exportPDF';
 
@@ -30,7 +31,7 @@ const AppInner = () => {
   const { fitView } = useReactFlow();
 
   const { current, commit, undo, redo, reset, canUndo, canRedo } = useHistory(loadInitial());
-  const { addChild, addSibling, deleteNode, updateText, toggleCollapse, moveNode } = useMindMap(current, commit);
+  const { addChild, addSibling, deleteNode, updateText, toggleCollapse, moveNode, pasteNode } = useMindMap(current, commit);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -53,9 +54,10 @@ const AppInner = () => {
   const handleCancelEdit = useCallback(() => setEditingId(null), []);
 
   // --- ノード追加（追加後に新ノードを編集モードに） ---
-  const handleAddChild = useCallback(() => {
-    const targetId = selectedId ?? current.id;
-    const newId = addChild(targetId);
+  // targetId を明示渡しすることで右クリックメニューの非同期state問題を回避
+  const handleAddChild = useCallback((targetId?: string) => {
+    const id = targetId ?? selectedId ?? current.id;
+    const newId = addChild(id);
     if (newId) {
       setSelectedId(newId);
       pendingFocusId.current = newId;
@@ -63,9 +65,10 @@ const AppInner = () => {
     }
   }, [selectedId, current.id, addChild]);
 
-  const handleAddSibling = useCallback(() => {
-    if (!selectedId) return;
-    const newId = addSibling(selectedId);
+  const handleAddSibling = useCallback((targetId?: string) => {
+    const id = targetId ?? selectedId;
+    if (!id) return;
+    const newId = addSibling(id);
     if (newId) {
       setSelectedId(newId);
       pendingFocusId.current = newId;
@@ -74,13 +77,14 @@ const AppInner = () => {
   }, [selectedId, addSibling]);
 
   // --- 削除（確認ダイアログ） ---
-  const handleDelete = useCallback(() => {
-    if (!selectedId || selectedId === current.id) return;
+  const handleDelete = useCallback((targetId?: string) => {
+    const id = targetId ?? selectedId;
+    if (!id || id === current.id) return;
     const find = (node: MindMapNode): MindMapNode | null =>
-      node.id === selectedId ? node : node.children.map(find).find(Boolean) ?? null;
+      node.id === id ? node : node.children.map(find).find(Boolean) ?? null;
     const hasChildren = (find(current)?.children.length ?? 0) > 0;
     if (hasChildren && !window.confirm('子ノードも含めて削除します。よろしいですか？')) return;
-    deleteNode(selectedId);
+    deleteNode(id);
     setSelectedId(null);
   }, [selectedId, current, deleteNode]);
 
@@ -129,6 +133,30 @@ const AppInner = () => {
     navigator.clipboard.writeText(nodeToText(target)).catch(() => {/* コピー失敗は無視 */});
   }, [selectedId, current]);
 
+  // --- カット ---
+  const handleCut = useCallback(() => {
+    if (!selectedId || selectedId === current.id) return;
+    const find = (node: MindMapNode): MindMapNode | null =>
+      node.id === selectedId ? node : node.children.map(find).find(Boolean) ?? null;
+    const target = find(current);
+    if (!target) return;
+    navigator.clipboard.writeText(nodeToText(target)).then(() => {
+      handleDelete(selectedId);
+    }).catch(() => {/* クリップボード書き込み失敗は無視 */});
+  }, [selectedId, current, deleteNode]);
+
+  // --- ペースト ---
+  const handlePaste = useCallback(async () => {
+    const targetId = selectedId ?? current.id;
+    try {
+      const text = await navigator.clipboard.readText();
+      if (text.length > 1 * 1024 * 1024) return; // 1MB超は無視
+      const parsed = parseIndentText(text);
+      if (!parsed) return;
+      pasteNode(targetId, parsed);
+    } catch {/* クリップボード読み取り失敗は無視 */}
+  }, [selectedId, current.id, pasteNode]);
+
   // --- キーボード ---
   useKeyboard({
     onUndo: undo,
@@ -140,6 +168,8 @@ const AppInner = () => {
     onFitView: handleFitView,
     onSave: () => {},
     onCopy: handleCopy,
+    onCut: handleCut,
+    onPaste: handlePaste,
     isEditing: editingId !== null,
   });
 
@@ -178,19 +208,10 @@ const AppInner = () => {
           <NodeContextMenu
             state={contextMenu}
             isRoot={contextMenuTargetIsRoot}
-            onAddChild={() => {
-              setSelectedId(contextMenu.nodeId);
-              handleAddChild();
-            }}
-            onAddSibling={() => {
-              setSelectedId(contextMenu.nodeId);
-              handleAddSibling();
-            }}
+            onAddChild={() => handleAddChild(contextMenu.nodeId)}
+            onAddSibling={() => handleAddSibling(contextMenu.nodeId)}
             onStartEdit={() => handleStartEdit(contextMenu.nodeId)}
-            onDelete={() => {
-              setSelectedId(contextMenu.nodeId);
-              handleDelete();
-            }}
+            onDelete={() => handleDelete(contextMenu.nodeId)}
             onClose={() => setContextMenu(null)}
           />
         )}

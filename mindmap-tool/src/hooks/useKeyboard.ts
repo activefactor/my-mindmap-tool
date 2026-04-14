@@ -10,6 +10,8 @@ interface KeyboardHandlers {
   onFitView: () => void;
   onSave: () => void;
   onCopy: () => void;
+  onCut: () => void;
+  onPaste: () => void;
   isEditing: boolean;
 }
 
@@ -23,6 +25,8 @@ export const useKeyboard = ({
   onFitView,
   onSave,
   onCopy,
+  onCut,
+  onPaste,
   isEditing,
 }: KeyboardHandlers) => {
   useEffect(() => {
@@ -37,6 +41,8 @@ export const useKeyboard = ({
       if (ctrl && e.shiftKey && e.key === 'z') { e.preventDefault(); onRedo(); return; }
       if (ctrl && e.key === 's') { e.preventDefault(); onSave(); return; }
       if (ctrl && e.key === 'c') { e.preventDefault(); onCopy(); return; }
+      if (ctrl && e.key === 'x') { e.preventDefault(); onCut(); return; }
+      if (ctrl && e.key === 'v') { e.preventDefault(); onPaste(); return; }
 
       if (e.key === 'Tab') { e.preventDefault(); onAddChild(); return; }
       if (e.key === 'Enter') { e.preventDefault(); onAddSibling(); return; }
@@ -47,5 +53,5 @@ export const useKeyboard = ({
 
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [isEditing, onUndo, onRedo, onAddChild, onAddSibling, onDelete, onStartEdit, onFitView, onSave, onCopy]);
+  }, [isEditing, onUndo, onRedo, onAddChild, onAddSibling, onDelete, onStartEdit, onFitView, onSave, onCopy, onCut, onPaste]);
 };

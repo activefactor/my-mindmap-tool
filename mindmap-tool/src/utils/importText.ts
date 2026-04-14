@@ -5,6 +5,7 @@ const MAX_FILE_SIZE = 1 * 1024 * 1024; // 1MB
 const MAX_LINES = 10000;
 const MAX_DEPTH = 50;
 const INDENT_SIZE = 4;
+const MAX_TEXT_LENGTH = 500; // importJSON.ts の MAX_TEXT_LENGTH と一致させること
 
 export const importText = (file: File): Promise<MindMapNode> => {
   return new Promise((resolve, reject) => {
@@ -17,7 +18,7 @@ export const importText = (file: File): Promise<MindMapNode> => {
     reader.onload = (e) => {
       try {
         const raw = e.target?.result as string;
-        const root = parseIndentText(raw);
+        const root = _parseIndentText(raw);
         resolve(root);
       } catch (err) {
         reject(new Error(`テキストの解析に失敗しました: ${(err as Error).message}`));
@@ -28,7 +29,15 @@ export const importText = (file: File): Promise<MindMapNode> => {
   });
 };
 
-const parseIndentText = (raw: string): MindMapNode => {
+export const parseIndentText = (raw: string): MindMapNode | null => {
+  try {
+    return _parseIndentText(raw);
+  } catch {
+    return null;
+  }
+};
+
+const _parseIndentText = (raw: string): MindMapNode => {
   const lines = raw.split('\n').filter((l) => l.trim() !== '');
 
   if (lines.length === 0) throw new Error('テキストが空です。');
@@ -39,7 +48,8 @@ const parseIndentText = (raw: string): MindMapNode => {
     const spaces = line.match(/^( *)/)?.[1].length ?? 0;
     const depth = Math.floor(spaces / INDENT_SIZE);
     if (depth > MAX_DEPTH) throw new Error('インデントの深さが上限（50階層）を超えています。');
-    return { depth, text: line.trim() };
+    const text = line.trim().slice(0, MAX_TEXT_LENGTH);
+    return { depth, text };
   });
 
   // 最初の行をルートとして扱う（depth=0 以外の先頭行も受け入れる）

@@ -6,6 +6,7 @@ import type { NodeData } from '../../types/mindmap';
 // treeToFlow の NODE_WIDTH / ROOT_NODE_WIDTH と一致させること（DESIGN.md 参照）
 const NODE_WIDTH = 160;
 const ROOT_NODE_WIDTH = 200;
+const MAX_TEXT_LENGTH = 500;
 
 export const MindMapNodeComponent = memo(({ data }: NodeProps<NodeData>) => {
   const {
@@ -114,6 +115,7 @@ export const MindMapNodeComponent = memo(({ data }: NodeProps<NodeData>) => {
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
           onBlur={() => onCommitEdit(node.id, draft)}
+          maxLength={MAX_TEXT_LENGTH}
           style={{
             font: 'inherit',
             fontSize: isRoot ? 'var(--font-size-xl)' : 'var(--font-size-base)',

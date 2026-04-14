@@ -121,5 +121,14 @@ export const useMindMap = (
     findParent(current, nodeId),
   [current]);
 
-  return { addChild, addSibling, deleteNode, updateText, toggleCollapse, moveNode, getParent };
+  // パース済みノードを parentId の子として末尾に追加（ペースト用）
+  const pasteNode = useCallback((parentId: string, nodeToAdd: MindMapNode) => {
+    const next = mapTree(current, (n) => {
+      if (n.id !== parentId) return n;
+      return { ...n, collapsed: false, children: [...n.children, nodeToAdd] };
+    });
+    commit(next);
+  }, [current, commit]);
+
+  return { addChild, addSibling, deleteNode, updateText, toggleCollapse, moveNode, getParent, pasteNode };
 };
