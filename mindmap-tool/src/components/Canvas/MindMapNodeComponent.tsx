@@ -23,16 +23,24 @@ export const MindMapNodeComponent = memo(({ data }: NodeProps<NodeData>) => {
     onDraftChange,
   } = data;
 
-  const inputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const isComposingRef = useRef(false);
+  const draftRef = useRef(node.text); // compositionEnd 内で最新 draft を参照するため
   const [draft, setDraft] = useState(node.text);
+  draftRef.current = draft; // レンダーのたびに同期
 
-  // 編集開始時のみ初期化・フォーカス（node.text を deps に入れると毎keystroke で select-all になるため除外）
+  // 編集開始時のみ初期化・フォーカス・高さリセット
   useEffect(() => {
     if (isEditing) {
       setDraft(node.text);
       setTimeout(() => {
-        inputRef.current?.focus();
-        inputRef.current?.select();
+        const el = textareaRef.current;
+        if (!el) return;
+        el.focus();
+        el.select();
+        // 初期高さを内容に合わせる
+        el.style.height = 'auto';
+        el.style.height = `${el.scrollHeight}px`;
       }, 0);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -41,15 +49,29 @@ export const MindMapNodeComponent = memo(({ data }: NodeProps<NodeData>) => {
   const hasChildren = node.children.length > 0;
   const width = isRoot ? ROOT_NODE_WIDTH : NODE_WIDTH;
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter') { e.preventDefault(); onCommitEdit(node.id, draft); }
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter') {
+      // IME変換中の確定Enterは無視（isComposing=true のとき）
+      if (e.nativeEvent.isComposing) return;
+      e.preventDefault();
+      onCommitEdit(node.id, draft);
+    }
     if (e.key === 'Escape') { onCancelEdit(); }
     e.stopPropagation();
   };
 
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setDraft(e.target.value);
-    onDraftChange(node.id, e.target.value);
+  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    setDraft(value);
+    draftRef.current = value;
+    // IME変換中はレイアウト再計算をスキップ
+    // treeToFlow が走るとノード座標が変わり IME 候補ウィンドウの位置がずれるため
+    if (!isComposingRef.current) {
+      onDraftChange(node.id, value);
+    }
+    // 高さを内容に合わせる
+    e.target.style.height = 'auto';
+    e.target.style.height = `${e.target.scrollHeight}px`;
   };
 
   // ---- スタイル計算 ----
@@ -109,13 +131,23 @@ export const MindMapNodeComponent = memo(({ data }: NodeProps<NodeData>) => {
       )}
 
       {isEditing ? (
-        <input
-          ref={inputRef}
+        <textarea
+          ref={textareaRef}
           value={draft}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
-          onBlur={() => onCommitEdit(node.id, draft)}
+          onCompositionStart={() => { isComposingRef.current = true; }}
+          onCompositionEnd={() => {
+            isComposingRef.current = false;
+            // 変換確定後にレイアウト更新（変換中は座標を動かさない）
+            onDraftChange(node.id, draftRef.current);
+          }}
+          onBlur={() => {
+            if (isComposingRef.current) return;
+            onCommitEdit(node.id, draftRef.current);
+          }}
           maxLength={MAX_TEXT_LENGTH}
+          rows={1}
           style={{
             font: 'inherit',
             fontSize: isRoot ? 'var(--font-size-xl)' : 'var(--font-size-base)',
@@ -126,6 +158,12 @@ export const MindMapNodeComponent = memo(({ data }: NodeProps<NodeData>) => {
             outline: 'none',
             width: '100%',
             lineHeight: 'var(--line-height-base)',
+            resize: 'none',
+            overflow: 'hidden',
+            padding: 0,
+            margin: 0,
+            display: 'block',
+            wordBreak: 'break-all',
           }}
         />
       ) : (
