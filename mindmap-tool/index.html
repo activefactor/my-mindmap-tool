@@ -6,8 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <!-- Content-Security-Policy: サーバーサイドヘッダーが設定できないためメタタグで代用 -->
     <!-- script-src / style-src の 'unsafe-inline' は ReactFlow のインラインスタイルと Vite の動作に必要 -->
+    <!-- connect-src 'self': Vite HMR WebSocket (ws://localhost) および Chrome DevTools JSON エンドポイントを許可 -->
     <meta http-equiv="Content-Security-Policy"
-      content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'self';">
+      content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self';">
     <title>mindmap-tool</title>
   </head>
   <body>

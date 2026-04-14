@@ -76,14 +76,10 @@ const AppInner = () => {
     }
   }, [selectedId, addSibling]);
 
-  // --- 削除（確認ダイアログ） ---
+  // --- 削除（Undo で復元可能なため確認なし） ---
   const handleDelete = useCallback((targetId?: string) => {
     const id = targetId ?? selectedId;
     if (!id || id === current.id) return;
-    const find = (node: MindMapNode): MindMapNode | null =>
-      node.id === id ? node : node.children.map(find).find(Boolean) ?? null;
-    const hasChildren = (find(current)?.children.length ?? 0) > 0;
-    if (hasChildren && !window.confirm('子ノードも含めて削除します。よろしいですか？')) return;
     deleteNode(id);
     setSelectedId(null);
   }, [selectedId, current, deleteNode]);
