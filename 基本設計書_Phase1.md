@@ -1,8 +1,9 @@
 # マインドマップツール 基本設計書
 ## Phase 1 — サーバーレス動作確認版
 
-**バージョン**: 1.0  
+**バージョン**: 1.1  
 **作成日**: 2026-04-11  
+**更新日**: 2026-04-14  
 **対象フェーズ**: Phase 1（認証なし・サーバーなし）
 
 ---
@@ -21,7 +22,7 @@ Phase 1 では認証・サーバーを持たず、静的ファイルのみで動
 | 動作形態 | 静的Webアプリ（サーバー不要） |
 | 対応ブラウザ | Chrome / Edge / Firefox / Safari 最新版 |
 | 起動方法 | `index.html` をブラウザで直接開く、またはローカルサーバー経由 |
-| デプロイ先候補 | GitHub Pages / Netlify / 社内ファイルサーバー |
+| デプロイ先 | GitHub Pages（https://activefactor.github.io/my-mindmap-tool/） |
 
 ---
 
@@ -144,11 +145,15 @@ Phase 1 では認証・サーバーを持たず、静的ファイルのみで動
 
 #### PNGエクスポート
 - キャンバス全体を画像化してダウンロード
-- ファイル名: `mindmap_YYYYMMDD_HHMMSS.png`
+- ファイル名: `mindmap_YYYYMMDD_HHMM.png`
+- 実装方式: `html-to-image`（HTMLノード）と `exportUtils.ts`（SVGエッジ）を別途キャプチャして Canvas 上で合成
+  - html-to-image は SVG foreignObject 内の inline SVG を描画できないため、エッジ SVG を XMLSerializer でシリアライズ → Image → Canvas に変換して重ねる
 
 #### PDFエクスポート
 - キャンバス全体を PDF 化してダウンロード
+- ファイル名: `mindmap_YYYYMMDD_HHMM.pdf`
 - A4横向き、マップ全体を1ページに収める
+- 実装方式: PNG と同様の合成方式でキャプチャし、jsPDF で PDF に変換
 
 ### 3.4 Undo / Redo
 
@@ -192,7 +197,7 @@ Phase 1 では認証・サーバーを持たず、静的ファイルのみで動
 ```
 ┌──────────────────────────────────────────────────────────┐
 │  ツールバー                                               │
-│  [新規] [開く▼] [保存▼]  |  [エクスポート▼]  |  [フィット] [+] [-]  │
+│  [新規] | [開く▼] [保存▼] [エクスポート▼] | [↩戻す] [↪やり直す] | [全体表示]  │
 ├──────────────────────────────────────────────────────────┤
 │                                                          │
 │                                                          │
@@ -211,8 +216,9 @@ Phase 1 では認証・サーバーを持たず、静的ファイルのみで動
 | 開く ▼ | JSONを開く / テキストを開く |
 | 保存 ▼ | JSONで保存 / テキストで保存 |
 | エクスポート ▼ | PNGで書き出し / PDFで書き出し |
-| フィット | マップ全体をキャンバスにフィット |
-| ＋ / − | ズームイン／アウト |
+| ↩ 戻す | Undo（無効時はグレーアウト） |
+| ↪ やり直す | Redo（無効時はグレーアウト） |
+| 全体表示 | マップ全体をキャンバスにフィット |
 
 ### 4.3 右クリックメニュー（ノード選択時）
 
@@ -248,6 +254,21 @@ interface MindMapFile {
   createdAt: string;    // ISO 8601
   updatedAt: string;    // ISO 8601
   root: MindMapNode;    // ルートノード
+}
+
+// React Flow ノードに渡すデータ
+interface NodeData {
+  node: MindMapNode;
+  isRoot: boolean;
+  isEditing: boolean;
+  isDragTarget: boolean;
+  isSelected: boolean;
+  onStartEdit: (id: string) => void;
+  onCommitEdit: (id: string, text: string) => void;
+  onCancelEdit: () => void;
+  onContextMenu: (e: React.MouseEvent, id: string) => void;
+  onToggleCollapse: (id: string) => void;
+  onDraftChange: (id: string, text: string) => void;  // 編集中テキストのリアルタイム通知（高さ推定に使用）
 }
 ```
 
@@ -325,8 +346,9 @@ src/
 │   ├── importJSON.ts           # JSON インポート・バリデーション
 │   ├── exportText.ts           # インデントテキスト エクスポート
 │   ├── importText.ts           # インデントテキスト インポート・パース
-│   ├── exportPNG.ts            # PNG エクスポート（html2canvas）
-│   ├── exportPDF.ts            # PDF エクスポート（jsPDF）
+│   ├── exportPNG.ts            # PNG エクスポート（html-to-image + SVG合成）
+│   ├── exportPDF.ts            # PDF エクスポート（html-to-image + SVG合成 + jsPDF）
+│   ├── exportUtils.ts          # SVGエッジキャプチャ共通ユーティリティ
 │   └── generateId.ts           # UUID 生成
 └── types/
     └── mindmap.ts              # 型定義（MindMapNode, MindMapFile, NodeData）
@@ -336,12 +358,21 @@ src/
 
 | 定数 | 値 | 説明 |
 |------|-----|------|
-| NODE_MAX_WIDTH | 240px | ノードの最大幅（コンポーネントの maxWidth と一致） |
-| H_GAP | 60px | 列間の水平余白 |
-| NODE_HEIGHT | 40px | ノードの標準高さ |
-| V_GAP | 20px | 行間の垂直余白 |
+| NODE_WIDTH | 160px | 非ルートノードの固定幅 |
+| ROOT_NODE_WIDTH | 200px | ルートノードの固定幅 |
+| H_GAP | 60px | 列間の水平余白（右エッジ〜次列左エッジ） |
+| V_GAP | 20px | ノード間の垂直余白 |
+| MIN_HEIGHT | 40px | ノードの最小高さ |
+| LINE_HEIGHT | 22px | 非ルートノードの行高（14pxフォント） |
+| ROOT_LINE_HEIGHT | 28px | ルートノードの行高（20pxフォント） |
+| PADDING_V | 16px | 非ルートノードの上下パディング合計 |
+| ROOT_PADDING_V | 24px | ルートノードの上下パディング合計 |
+| CHARS_PER_LINE | 12文字 | 非ルートノードの折り返し基準（高さ推定用） |
+| ROOT_CHARS_PER_LINE | 10文字 | ルートノードの折り返し基準（高さ推定用） |
 
-- 列間隔 = `NODE_MAX_WIDTH + H_GAP` = **300px**（長いテキストでも重ならない）
+- 1列目の列幅 = `ROOT_NODE_WIDTH + H_GAP` = **260px**
+- 2列目以降の列幅 = `NODE_WIDTH + H_GAP` = **220px**
+- ノード高さはテキスト長から動的に推定（折り返し考慮）
 - 縦位置はサブツリーの高さを基に中央揃え
 
 ### ドラッグ親子変更の検出アルゴリズム
@@ -364,13 +395,14 @@ src/
 
 | 役割 | ライブラリ | バージョン | 選定理由 |
 |------|-----------|----------|---------|
-| UIフレームワーク | React | 18.x | エコシステムの充実 |
-| 言語 | TypeScript | 5.x | 型安全性 |
-| ビルドツール | Vite | 5.x | 高速・設定シンプル |
+| UIフレームワーク | React | 19.x | エコシステムの充実 |
+| 言語 | TypeScript | 6.x | 型安全性 |
+| ビルドツール | Vite | 8.x | 高速・設定シンプル |
 | マインドマップ描画 | React Flow | 11.x | ノード・エッジ操作が豊富 |
 | スタイル | Tailwind CSS | 3.x | 素早いUI構築 |
-| PNG書き出し | html2canvas | 1.x | DOM → Canvas 変換 |
-| PDF書き出し | jsPDF | 2.x | ブラウザ完結PDF生成 |
+| PNG/PDF書き出し（HTMLノード） | html-to-image | 1.x | DOM → Canvas 変換（SVGは別途処理） |
+| PNG/PDF書き出し（SVGエッジ） | XMLSerializer（ブラウザ標準） | — | html-to-imageが描画できないSVGエッジを別途合成 |
+| PDF生成 | jsPDF | 4.x | ブラウザ完結PDF生成 |
 
 ---
 
@@ -408,6 +440,7 @@ mindmap-tool/
 | `F` | キャンバスを全体フィット |
 | `Ctrl + Z` | 元に戻す |
 | `Ctrl + Shift + Z` | やり直す |
+| `Ctrl + C` / `Cmd + C` | 選択ノードとその子孫をインデントテキストとしてコピー |
 | `Ctrl + S` | JSONで保存 |
 | `+` / `-` | ズームイン／アウト |
 | `Ctrl + 0` | ズームリセット |
@@ -432,7 +465,7 @@ mindmap-tool/
 |---|------|------|
 | 1 | ノードの色・スタイル変更 | Phase 1 では単色で統一、Phase 2 以降で対応 |
 | 2 | Undo/Redo の実装方式 | スナップショット方式で実装済み |
-| 3 | デプロイ先 | GitHub Pages / 社内サーバー 等 |
+| 3 | デプロイ先 | GitHub Pages で公開済み（https://activefactor.github.io/my-mindmap-tool/） |
 | 4 | Phase 2 の認証方式 | 社内SSO連携 vs シンプルID/PW |
 | 5 | ドラッグ中のノード幅動的取得 | 現在は maxWidth(240px) を固定値で使用。将来は実描画幅を取得して精度向上を検討 |
 
