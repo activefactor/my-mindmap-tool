@@ -21,6 +21,7 @@ export interface NodeData {
   isEditing: boolean;
   isDragTarget: boolean;
   isSelected: boolean;
+  nodeWidth: number;
   onStartEdit: (id: string) => void;
   onCommitEdit: (id: string, text: string) => void;
   onCancelEdit: () => void;

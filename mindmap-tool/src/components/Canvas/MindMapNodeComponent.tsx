@@ -3,10 +3,11 @@ import { Handle, Position } from 'reactflow';
 import type { NodeProps } from 'reactflow';
 import type { NodeData } from '../../types/mindmap';
 
-// treeToFlow の NODE_WIDTH / ROOT_NODE_WIDTH と一致させること（DESIGN.md 参照）
-const NODE_WIDTH = 160;
-const ROOT_NODE_WIDTH = 200;
 const MAX_TEXT_LENGTH = 500;
+// treeToFlow の CHARS_PER_LINE と一致させること。
+// この文字数以内 = 1行に収まる = 幅をリアルタイム更新して子ノードを追従させる。
+// これを超えたら = 折り返し = 幅固定・高さのみ伸縮。
+const SINGLE_LINE_CHARS = 9;
 
 export const MindMapNodeComponent = memo(({ data }: NodeProps<NodeData>) => {
   const {
@@ -15,6 +16,7 @@ export const MindMapNodeComponent = memo(({ data }: NodeProps<NodeData>) => {
     isEditing,
     isDragTarget,
     isSelected,
+    nodeWidth,
     onStartEdit,
     onCommitEdit,
     onCancelEdit,
@@ -47,7 +49,6 @@ export const MindMapNodeComponent = memo(({ data }: NodeProps<NodeData>) => {
   }, [isEditing]);
 
   const hasChildren = node.children.length > 0;
-  const width = isRoot ? ROOT_NODE_WIDTH : NODE_WIDTH;
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter') {
@@ -64,29 +65,38 @@ export const MindMapNodeComponent = memo(({ data }: NodeProps<NodeData>) => {
     const value = e.target.value;
     setDraft(value);
     draftRef.current = value;
-    // IME変換中はレイアウト再計算をスキップ
-    // treeToFlow が走るとノード座標が変わり IME 候補ウィンドウの位置がずれるため
     if (!isComposingRef.current) {
-      onDraftChange(node.id, value);
+      // 1行に収まる文字数のときのみレイアウト再計算（子ノードのX座標を追従させる）。
+      // 折り返し後は幅を固定し、textareaの高さだけDOMで伸縮させる。
+      if (value.length <= SINGLE_LINE_CHARS) {
+        onDraftChange(node.id, value);
+      }
+      // IME変換中は高さ調整もスキップ（ローマ字入力で縦に伸びるのを防ぐ）
+      e.target.style.height = 'auto';
+      e.target.style.height = `${e.target.scrollHeight}px`;
     }
-    // 高さを内容に合わせる
-    e.target.style.height = 'auto';
-    e.target.style.height = `${e.target.scrollHeight}px`;
   };
 
   // ---- スタイル計算 ----
-  // 選択リング: 2px の外枠 + shadow
+  // 非選択・非編集・非ルートのノードは背景/ボーダーを透明にして文字だけを表示する。
+  // 選択時・編集時・ルートは従来のボックススタイルを維持。
+  const isBoxVisible = isRoot || isEditing || isSelected || isDragTarget;
+
   const ringStyle = isSelected
     ? `0 0 0 2px var(--color-primary-500), var(--shadow-lg)`
     : isDragTarget
       ? 'var(--shadow-lg)'
-      : 'var(--shadow-md)';
+      : isRoot
+        ? 'var(--shadow-md)'
+        : 'none';
 
   const borderColor = isDragTarget
     ? 'var(--color-primary-500)'
     : isSelected
       ? 'var(--color-primary-400)'
-      : 'var(--color-border-node)';
+      : isBoxVisible
+        ? 'var(--color-border-node)'
+        : 'transparent';
 
   const borderWidth = isDragTarget || isSelected
     ? 'var(--border-width-thick)'
@@ -94,18 +104,20 @@ export const MindMapNodeComponent = memo(({ data }: NodeProps<NodeData>) => {
 
   const bgColor = isRoot
     ? 'var(--color-bg-node-root)'
-    : isDragTarget
-      ? 'var(--color-bg-node-hover)'
-      : isSelected
-        ? 'var(--color-bg-node-selected)'
-        : 'var(--color-bg-node)';
+    : isEditing
+      ? 'var(--color-bg-node)'
+      : isDragTarget
+        ? 'var(--color-bg-node-hover)'
+        : isSelected
+          ? 'var(--color-bg-node-selected)'
+          : 'transparent';
 
   return (
     <div
       onContextMenu={(e) => onContextMenu(e, node.id)}
       onDoubleClick={() => onStartEdit(node.id)}
       style={{
-        width: `${width}px`,
+        width: `${nodeWidth}px`,
         background: bgColor,
         border: `${borderWidth} solid ${borderColor}`,
         borderRadius: isRoot ? 'var(--radius-lg)' : 'var(--radius-md)',
@@ -139,8 +151,16 @@ export const MindMapNodeComponent = memo(({ data }: NodeProps<NodeData>) => {
           onCompositionStart={() => { isComposingRef.current = true; }}
           onCompositionEnd={() => {
             isComposingRef.current = false;
-            // 変換確定後にレイアウト更新（変換中は座標を動かさない）
-            onDraftChange(node.id, draftRef.current);
+            // 変換確定後に高さを正しく反映
+            const el = textareaRef.current;
+            if (el) {
+              el.style.height = 'auto';
+              el.style.height = `${el.scrollHeight}px`;
+            }
+            // 1行以内ならレイアウト更新（折り返し後は幅固定のままにする）
+            if (draftRef.current.length <= SINGLE_LINE_CHARS) {
+              onDraftChange(node.id, draftRef.current);
+            }
           }}
           onBlur={() => {
             if (isComposingRef.current) return;
@@ -194,7 +214,7 @@ export const MindMapNodeComponent = memo(({ data }: NodeProps<NodeData>) => {
             width: '16px',
             height: '16px',
             borderRadius: 'var(--radius-full)',
-            background: 'var(--color-primary-400)',
+            background: 'var(--color-gray-400)',
             color: 'var(--color-gray-0)',
             border: 'none',
             cursor: 'pointer',

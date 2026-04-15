@@ -24,14 +24,15 @@ html, body, #root {
   font-family: var(--font-family-base);
 }
 
-.react-flow__edge-path {
+.react-flow__edge .react-flow__edge-path {
   stroke: var(--color-edge);
-  stroke-width: 2;
+  stroke-width: 3;
 }
 
 .react-flow__edge.selected .react-flow__edge-path,
 .react-flow__edge:hover .react-flow__edge-path {
   stroke: var(--color-edge-hover);
+  stroke-width: 3;
 }
 
 /* キャンバスのドットグリッド */

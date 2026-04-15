@@ -3,19 +3,31 @@ import type { MindMapNode, NodeData } from '../types/mindmap';
 
 // ============================================================
 // レイアウト定数 — DESIGN.md / 基本設計書のレイアウト設計と対応
-// ノードコンポーネントの width と必ず一致させること。
 // ============================================================
-const NODE_WIDTH = 160;       // 非ルートノードの固定幅
-const ROOT_NODE_WIDTH = 200;  // ルートノードの固定幅
-const H_GAP = 60;             // 列間の水平余白（右エッジ〜次列左エッジ）
-const V_GAP = 20;             // ノード間の垂直余白
-const LINE_HEIGHT = 22;       // 14px フォントの行高
-const ROOT_LINE_HEIGHT = 28;  // 20px フォントの行高（ルート）
-const PADDING_V = 16;         // 上下パディング合計（8px × 2）
-const ROOT_PADDING_V = 24;    // ルート上下パディング合計（12px × 2）
-const CHARS_PER_LINE = 12;    // NODE_WIDTH(160) - padding(32) = 128px / 約10px/字 ≈ 12文字
+const NODE_WIDTH = 160;         // 非ルートノードの最大幅
+const ROOT_NODE_WIDTH = 200;    // ルートノードの固定幅
+const H_GAP = 60;               // ノード右端〜子ノード左端の水平余白
+const V_GAP = 20;               // ノード間の垂直余白
+const LINE_HEIGHT = 22;         // 14px フォントの行高
+const ROOT_LINE_HEIGHT = 28;    // 20px フォントの行高（ルート）
+const PADDING_V = 16;           // 上下パディング合計（8px × 2）
+const ROOT_PADDING_V = 24;      // ルート上下パディング合計（12px × 2）
+const CHAR_WIDTH = 14;          // 1文字あたりの推定幅。日本語文字は font-size(14px) とほぼ同幅なので 14px
+const PADDING_H = 32;           // 水平パディング合計（16px × 2）
+const MIN_NODE_WIDTH = 80;      // ノードの最小幅（日本語2〜3文字が折り返さない下限）
+const CHARS_PER_LINE = 9;       // NODE_WIDTH(160) - padding(32) = 128px / 14px/字 ≈ 9文字
 const ROOT_CHARS_PER_LINE = 10; // ROOT_NODE_WIDTH(200) - padding(48) = 152px / 約14px/字 ≈ 10文字
 const MIN_HEIGHT = 40;
+
+/**
+ * テキスト長からノードの推定幅を計算する。
+ * テキストが短いほど幅が狭くなり、接続線がテキスト端から自然に伸びる。
+ */
+const estimateWidth = (text: string, isRoot: boolean): number => {
+  if (isRoot) return ROOT_NODE_WIDTH;
+  if (!text) return MIN_NODE_WIDTH;
+  return Math.min(Math.max(text.length * CHAR_WIDTH + PADDING_H, MIN_NODE_WIDTH), NODE_WIDTH);
+};
 
 /** テキスト長からノードの推定高さを計算する */
 const estimateHeight = (text: string, isRoot: boolean): number => {
@@ -27,32 +39,30 @@ const estimateHeight = (text: string, isRoot: boolean): number => {
   return Math.max(MIN_HEIGHT, lines * lineH + paddingV);
 };
 
-/** 深さからノードの列 X 座標を返す（固定幅ベース・常に一定間隔） */
-const getColX = (depth: number): number => {
-  if (depth === 0) return 0;
-  return ROOT_NODE_WIDTH + H_GAP + (depth - 1) * (NODE_WIDTH + H_GAP);
-};
-
 interface LayoutNode {
   id: string;
   x: number;
   y: number;
   height: number;
+  width: number;
 }
 
 const calcLayout = (
   node: MindMapNode,
   depth: number,
   yOffset: number,
+  nodeX: number,       // 自ノードのX座標（呼び出し元が決定）
   result: LayoutNode[],
 ): number => {
   const isRoot = depth === 0;
-  const x = getColX(depth);
+  const width = estimateWidth(node.text, isRoot);
   const height = estimateHeight(node.text, isRoot);
   const visibleChildren = node.collapsed ? [] : node.children;
+  // 子ノードのX座標 = 自ノードの右端 + 水平余白
+  const childX = nodeX + width + H_GAP;
 
   if (visibleChildren.length === 0) {
-    result.push({ id: node.id, x, y: yOffset, height });
+    result.push({ id: node.id, x: nodeX, y: yOffset, height, width });
     return height;
   }
 
@@ -60,7 +70,7 @@ const calcLayout = (
   let childY = yOffset;
   let totalChildrenHeight = 0;
   for (const child of visibleChildren) {
-    const h = calcLayout(child, depth + 1, childY, result);
+    const h = calcLayout(child, depth + 1, childY, childX, result);
     childY += h + V_GAP;
     totalChildrenHeight += h + V_GAP;
   }
@@ -74,7 +84,7 @@ const calcLayout = (
   const childrenMidY = (firstChild.y + lastChild.y + lastChild.height) / 2;
   const nodeY = childrenMidY - height / 2;
 
-  result.push({ id: node.id, x, y: nodeY, height });
+  result.push({ id: node.id, x: nodeX, y: nodeY, height, width });
   return Math.max(totalChildrenHeight, height);
 };
 
@@ -84,7 +94,7 @@ export const treeToFlow = (
   editingDraft: string,
   selectedId: string | null,
   dragTargetId: string | null,
-  callbacks: Omit<NodeData, 'node' | 'isRoot' | 'isEditing' | 'isDragTarget' | 'isSelected'>,
+  callbacks: Omit<NodeData, 'node' | 'isRoot' | 'isEditing' | 'isDragTarget' | 'isSelected' | 'nodeWidth'>,
 ): { nodes: Node<NodeData>[]; edges: Edge[] } => {
   // 編集中ノードのテキストを draft で上書きしたツリーを作る（高さ推定に使用）
   const applyDraft = (node: MindMapNode): MindMapNode =>
@@ -94,9 +104,9 @@ export const treeToFlow = (
 
   const effectiveRoot = editingId ? applyDraft(root) : root;
 
-  // レイアウト計算（effectiveRoot を使って高さを正確に推定）
+  // レイアウト計算（effectiveRoot を使って高さ・幅を推定）
   const layoutResult: LayoutNode[] = [];
-  calcLayout(effectiveRoot, 0, 0, layoutResult);
+  calcLayout(effectiveRoot, 0, 0, 0, layoutResult);
   const posMap = new Map(layoutResult.map((r) => [r.id, r]));
 
   // 元ツリーのノードを ID でひける Map（NodeData には元データを渡す）
@@ -111,7 +121,7 @@ export const treeToFlow = (
   const edges: Edge[] = [];
 
   const traverse = (node: MindMapNode, parentId: string | null) => {
-    const layout = posMap.get(node.id) ?? { x: 0, y: 0, height: MIN_HEIGHT };
+    const layout = posMap.get(node.id) ?? { x: 0, y: 0, height: MIN_HEIGHT, width: NODE_WIDTH };
     const originalNode = originalMap.get(node.id) ?? node;
 
     nodes.push({
@@ -124,6 +134,7 @@ export const treeToFlow = (
         isEditing: node.id === editingId,
         isDragTarget: node.id === dragTargetId,
         isSelected: node.id === selectedId,
+        nodeWidth: layout.width,
         ...callbacks,
       },
     });
