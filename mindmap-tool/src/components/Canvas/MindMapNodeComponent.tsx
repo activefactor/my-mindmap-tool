@@ -4,10 +4,6 @@ import type { NodeProps } from 'reactflow';
 import type { NodeData } from '../../types/mindmap';
 
 const MAX_TEXT_LENGTH = 500;
-// treeToFlow の CHARS_PER_LINE と一致させること。
-// この文字数以内 = 1行に収まる = 幅をリアルタイム更新して子ノードを追従させる。
-// これを超えたら = 折り返し = 幅固定・高さのみ伸縮。
-const SINGLE_LINE_CHARS = 9;
 
 export const MindMapNodeComponent = memo(({ data }: NodeProps<NodeData>) => {
   const {
@@ -48,12 +44,24 @@ export const MindMapNodeComponent = memo(({ data }: NodeProps<NodeData>) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditing]);
 
-  const hasChildren = node.children.length > 0;
+  // nodeWidth が変わった（レイアウト再計算後）タイミングでtextarea高さを再計算する。
+  // 入力時に古い幅で折り返し高さが設定された後、幅が広がった時に高さを正しく縮める。
+  useEffect(() => {
+    if (!isEditing) return;
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+  }, [nodeWidth, isEditing]);
+
+  const hasChildren = node.children.length > 1;
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter') {
-      // IME変換中の確定Enterは無視（isComposing=true のとき）
+      // IME変換中の確定Enterは無視
       if (e.nativeEvent.isComposing) return;
+      // Shift+Enter は改行を挿入（preventDefault しない）
+      if (e.shiftKey) return;
       e.preventDefault();
       onCommitEdit(node.id, draft);
     }
@@ -65,13 +73,11 @@ export const MindMapNodeComponent = memo(({ data }: NodeProps<NodeData>) => {
     const value = e.target.value;
     setDraft(value);
     draftRef.current = value;
+    // 変換中でも幅追従のためレイアウト更新する。
+    // ノード自身のX・Yは自分の幅では変わらないため IME ウィンドウ位置は安定する。
+    onDraftChange(node.id, value);
     if (!isComposingRef.current) {
-      // 1行に収まる文字数のときのみレイアウト再計算（子ノードのX座標を追従させる）。
-      // 折り返し後は幅を固定し、textareaの高さだけDOMで伸縮させる。
-      if (value.length <= SINGLE_LINE_CHARS) {
-        onDraftChange(node.id, value);
-      }
-      // IME変換中は高さ調整もスキップ（ローマ字入力で縦に伸びるのを防ぐ）
+      // 高さ調整は変換中スキップ（ローマ字入力で縦に伸びるのを防ぐ）
       e.target.style.height = 'auto';
       e.target.style.height = `${e.target.scrollHeight}px`;
     }
@@ -151,16 +157,13 @@ export const MindMapNodeComponent = memo(({ data }: NodeProps<NodeData>) => {
           onCompositionStart={() => { isComposingRef.current = true; }}
           onCompositionEnd={() => {
             isComposingRef.current = false;
-            // 変換確定後に高さを正しく反映
+            // 変換確定後に高さ・レイアウトを更新
             const el = textareaRef.current;
             if (el) {
               el.style.height = 'auto';
               el.style.height = `${el.scrollHeight}px`;
             }
-            // 1行以内ならレイアウト更新（折り返し後は幅固定のままにする）
-            if (draftRef.current.length <= SINGLE_LINE_CHARS) {
-              onDraftChange(node.id, draftRef.current);
-            }
+            onDraftChange(node.id, draftRef.current);
           }}
           onBlur={() => {
             if (isComposingRef.current) return;
@@ -193,9 +196,8 @@ export const MindMapNodeComponent = memo(({ data }: NodeProps<NodeData>) => {
             fontWeight: isRoot ? 'var(--font-weight-bold)' : 'var(--font-weight-normal)',
             color: isRoot ? 'var(--color-text-on-primary)' : 'var(--color-text-primary)',
             lineHeight: 'var(--line-height-base)',
-            // テキストを折り返して全文表示（省略なし）
-            whiteSpace: 'normal',
-            wordBreak: 'break-all',
+            whiteSpace: 'pre-wrap',
+            wordBreak: 'break-word',
             display: 'block',
           }}
         >
@@ -204,31 +206,43 @@ export const MindMapNodeComponent = memo(({ data }: NodeProps<NodeData>) => {
       )}
 
       {hasChildren && (
+        // ステム線＋丸ボタンをノードの右端から外側へ配置
+        // left: 100% でノード右端を起点に外へ伸びる
         <button
           onClick={(e) => { e.stopPropagation(); onToggleCollapse(node.id); }}
+          title={node.collapsed ? '展開' : '折りたたむ'}
           style={{
             position: 'absolute',
-            right: '-12px',
+            left: '100%',
             top: '50%',
             transform: 'translateY(-50%)',
-            width: '16px',
-            height: '16px',
-            borderRadius: 'var(--radius-full)',
-            background: 'var(--color-gray-400)',
-            color: 'var(--color-gray-0)',
-            border: 'none',
-            cursor: 'pointer',
-            fontSize: '10px',
             display: 'flex',
             alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 10,
-            lineHeight: 1,
+            background: 'none',
+            border: 'none',
             padding: 0,
+            margin: 0,
+            cursor: 'pointer',
+            zIndex: 10,
           }}
-          title={node.collapsed ? '展開' : '折りたたむ'}
         >
-          {node.collapsed ? '▶' : '▼'}
+          {/* ノード右端から伸びるステム線（エッジと同色・同太さ） */}
+          <div style={{
+            width: '3px',
+            height: '3px',
+            background: 'var(--color-gray-400)',
+            flexShrink: 0,
+          }} />
+          {/* 交点に置く丸：展開中=塗りつぶし、折りたたみ時=白抜き */}
+          <div style={{
+            width: '10px',
+            height: '10px',
+            borderRadius: '50%',
+            flexShrink: 0,
+            background: node.collapsed ? 'var(--color-gray-0)' : 'var(--color-gray-400)',
+            border: '1.5px solid var(--color-gray-400)',
+            boxSizing: 'border-box',
+          }} />
         </button>
       )}
 

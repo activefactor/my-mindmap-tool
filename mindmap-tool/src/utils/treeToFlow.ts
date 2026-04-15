@@ -4,39 +4,50 @@ import type { MindMapNode, NodeData } from '../types/mindmap';
 // ============================================================
 // レイアウト定数 — DESIGN.md / 基本設計書のレイアウト設計と対応
 // ============================================================
-const NODE_WIDTH = 160;         // 非ルートノードの最大幅
+const NODE_WIDTH = 160;         // フォールバック用（幅推定のキャップには使わない）
 const ROOT_NODE_WIDTH = 200;    // ルートノードの固定幅
-const H_GAP = 60;               // ノード右端〜子ノード左端の水平余白
+const H_GAP = 44;               // ノード右端〜子ノード左端の水平余白
 const V_GAP = 20;               // ノード間の垂直余白
 const LINE_HEIGHT = 22;         // 14px フォントの行高
 const ROOT_LINE_HEIGHT = 28;    // 20px フォントの行高（ルート）
 const PADDING_V = 16;           // 上下パディング合計（8px × 2）
 const ROOT_PADDING_V = 24;      // ルート上下パディング合計（12px × 2）
-const CHAR_WIDTH = 14;          // 1文字あたりの推定幅。日本語文字は font-size(14px) とほぼ同幅なので 14px
+const CHAR_WIDTH = 14;          // 1文字あたりの推定幅（Noto Sans JP 14px ≈ 14px/字）
 const PADDING_H = 32;           // 水平パディング合計（16px × 2）
-const MIN_NODE_WIDTH = 80;      // ノードの最小幅（日本語2〜3文字が折り返さない下限）
-const CHARS_PER_LINE = 9;       // NODE_WIDTH(160) - padding(32) = 128px / 14px/字 ≈ 9文字
-const ROOT_CHARS_PER_LINE = 10; // ROOT_NODE_WIDTH(200) - padding(48) = 152px / 約14px/字 ≈ 10文字
+const ESTIMATE_BUFFER = 14;     // 幅推定バッファ（フォントメトリクスの誤差で最後の文字が折り返されるのを防ぐ）
+const MIN_NODE_WIDTH = 74;      // ノードの最小幅（日本語2文字相当: 2×14+32+14）
+const ROOT_CHARS_PER_LINE = 10; // ルートノードの折り返し文字数（固定幅のため定数）
 const MIN_HEIGHT = 40;
 
 /**
- * テキスト長からノードの推定幅を計算する。
- * テキストが短いほど幅が狭くなり、接続線がテキスト端から自然に伸びる。
+ * テキストからノードの推定幅を計算する。
+ * 改行がある場合は最長行の幅を使用。上限なし（テキストに合わせて自由に伸びる）。
  */
 const estimateWidth = (text: string, isRoot: boolean): number => {
   if (isRoot) return ROOT_NODE_WIDTH;
   if (!text) return MIN_NODE_WIDTH;
-  return Math.min(Math.max(text.length * CHAR_WIDTH + PADDING_H, MIN_NODE_WIDTH), NODE_WIDTH);
+  const maxLineLen = text.split('\n').reduce((max, line) => Math.max(max, line.length), 0);
+  return Math.max(maxLineLen * CHAR_WIDTH + PADDING_H + ESTIMATE_BUFFER, MIN_NODE_WIDTH);
 };
 
-/** テキスト長からノードの推定高さを計算する */
+/**
+ * テキストからノードの推定高さを計算する。
+ * 改行文字と、推定幅に基づく折り返しを両方考慮する。
+ */
 const estimateHeight = (text: string, isRoot: boolean): number => {
   if (!text) return MIN_HEIGHT;
-  const charsPerLine = isRoot ? ROOT_CHARS_PER_LINE : CHARS_PER_LINE;
   const lineH = isRoot ? ROOT_LINE_HEIGHT : LINE_HEIGHT;
   const paddingV = isRoot ? ROOT_PADDING_V : PADDING_V;
-  const lines = Math.max(1, Math.ceil(text.length / charsPerLine));
-  return Math.max(MIN_HEIGHT, lines * lineH + paddingV);
+  if (isRoot) {
+    const lines = Math.max(1, Math.ceil(text.length / ROOT_CHARS_PER_LINE));
+    return Math.max(MIN_HEIGHT, lines * lineH + paddingV);
+  }
+  const width = estimateWidth(text, false);
+  const charsPerLine = Math.max(1, Math.floor((width - PADDING_H) / CHAR_WIDTH));
+  const totalLines = text.split('\n').reduce((sum, line) => {
+    return sum + Math.max(1, Math.ceil(line.length / charsPerLine));
+  }, 0);
+  return Math.max(MIN_HEIGHT, totalLines * lineH + paddingV);
 };
 
 interface LayoutNode {
@@ -144,7 +155,7 @@ export const treeToFlow = (
         id: `e-${parentId}-${node.id}`,
         source: parentId,
         target: node.id,
-        type: 'smoothstep',
+        type: 'mindMapEdge',
       });
     }
 

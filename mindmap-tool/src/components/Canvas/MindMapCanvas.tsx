@@ -10,9 +10,11 @@ import 'reactflow/dist/style.css';
 
 import type { MindMapNode, ContextMenuState } from '../../types/mindmap';
 import { MindMapNodeComponent } from './MindMapNodeComponent';
+import { MindMapEdge } from './MindMapEdge';
 import { treeToFlow } from '../../utils/treeToFlow';
 
 const nodeTypes = { mindMapNode: MindMapNodeComponent } as const;
+const edgeTypes = { mindMapEdge: MindMapEdge } as const;
 
 // treeToFlow の NODE_MAX_WIDTH に合わせる
 const NODE_MAX_WIDTH = 200; // ルートが最大幅なので余裕をみて200
@@ -143,6 +145,7 @@ export const MindMapCanvas = ({
       nodes={nodes}
       edges={edges}
       nodeTypes={nodeTypes}
+      edgeTypes={edgeTypes}
       onNodeClick={(_, node) => onSelect(node.id)}
       onPaneClick={() => onSelect(null)}
       onNodeDrag={handleNodeDrag}
