@@ -25,6 +25,8 @@ interface MindMapCanvasProps {
   root: MindMapNode;
   selectedId: string | null;
   editingId: string | null;
+  edgeColor: string;
+  buttonColor: string;
   onSelect: (id: string | null) => void;
   onStartEdit: (id: string) => void;
   onCommitEdit: (id: string, text: string) => void;
@@ -38,6 +40,8 @@ export const MindMapCanvas = ({
   root,
   selectedId,
   editingId,
+  edgeColor,
+  buttonColor,
   onSelect,
   onStartEdit,
   onCommitEdit,
@@ -90,10 +94,10 @@ export const MindMapCanvas = ({
   );
 
   const { nodes, edges } = useMemo(
-    () => treeToFlow(root, editingId, editingDraft, selectedId, dragTargetId, callbacks),
+    () => treeToFlow(root, editingId, editingDraft, selectedId, dragTargetId, edgeColor, buttonColor, callbacks),
     // layoutTick はスナップバック強制に使用
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [root, editingId, editingDraft, selectedId, dragTargetId, callbacks, layoutTick],
+    [root, editingId, editingDraft, selectedId, dragTargetId, edgeColor, buttonColor, callbacks, layoutTick],
   );
 
   // ドラッグ中: ドロップ候補ノードを検出してハイライト

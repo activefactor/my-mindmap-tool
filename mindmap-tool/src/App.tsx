@@ -10,7 +10,7 @@ import { useMindMap } from './hooks/useMindMap';
 import { useKeyboard } from './hooks/useKeyboard';
 import { useAutoSave, loadFromStorage } from './hooks/useLocalStorage';
 
-import type { MindMapNode, ContextMenuState } from './types/mindmap';
+import type { MindMapNode, ContextMenuState, MapTheme } from './types/mindmap';
 import { generateId } from './utils/generateId';
 import { nodeToText } from './utils/exportText';
 import { parseIndentText } from './utils/importText';
@@ -36,6 +36,8 @@ const AppInner = () => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
+  const [edgeColor, setEdgeColor] = useState('#9CA3AF');
+  const [buttonColor, setButtonColor] = useState('#9CA3AF');
   const pendingFocusId = useRef<string | null>(null);
 
   useAutoSave(current);
@@ -93,10 +95,14 @@ const AppInner = () => {
   }, [reset]);
 
   // --- インポート ---
-  const handleImport = useCallback((root: MindMapNode) => {
+  const handleImport = useCallback((root: MindMapNode, theme?: MapTheme) => {
     reset(root);
     setSelectedId(null);
     setEditingId(null);
+    if (theme) {
+      setEdgeColor(theme.edgeColor);
+      setButtonColor(theme.buttonColor);
+    }
     setTimeout(() => fitView({ padding: 0.2 }), 100);
   }, [reset, fitView]);
 
@@ -177,6 +183,8 @@ const AppInner = () => {
         root={current}
         canUndo={canUndo}
         canRedo={canRedo}
+        edgeColor={edgeColor}
+        buttonColor={buttonColor}
         onUndo={undo}
         onRedo={redo}
         onNew={handleNew}
@@ -184,6 +192,8 @@ const AppInner = () => {
         onFitView={handleFitView}
         onExportPNG={handleExportPNG}
         onExportPDF={handleExportPDF}
+        onEdgeColorChange={setEdgeColor}
+        onButtonColorChange={setButtonColor}
       />
 
       <div style={{ flex: 1, position: 'relative' }}>
@@ -191,6 +201,8 @@ const AppInner = () => {
           root={current}
           selectedId={selectedId}
           editingId={editingId}
+          edgeColor={edgeColor}
+          buttonColor={buttonColor}
           onSelect={setSelectedId}
           onStartEdit={handleStartEdit}
           onCommitEdit={handleCommitEdit}

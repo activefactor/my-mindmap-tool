@@ -13,6 +13,7 @@ export const MindMapNodeComponent = memo(({ data }: NodeProps<NodeData>) => {
     isDragTarget,
     isSelected,
     nodeWidth,
+    buttonColor,
     onStartEdit,
     onCommitEdit,
     onCancelEdit,
@@ -230,7 +231,7 @@ export const MindMapNodeComponent = memo(({ data }: NodeProps<NodeData>) => {
           <div style={{
             width: '3px',
             height: '3px',
-            background: 'var(--color-gray-400)',
+            background: buttonColor,
             flexShrink: 0,
           }} />
           {/* 交点に置く丸：展開中=塗りつぶし、折りたたみ時=白抜き */}
@@ -239,8 +240,8 @@ export const MindMapNodeComponent = memo(({ data }: NodeProps<NodeData>) => {
             height: '10px',
             borderRadius: '50%',
             flexShrink: 0,
-            background: node.collapsed ? 'var(--color-gray-0)' : 'var(--color-gray-400)',
-            border: '1.5px solid var(--color-gray-400)',
+            background: node.collapsed ? 'var(--color-gray-0)' : buttonColor,
+            border: `1.5px solid ${buttonColor}`,
             boxSizing: 'border-box',
           }} />
         </button>

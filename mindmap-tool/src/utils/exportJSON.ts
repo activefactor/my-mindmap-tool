@@ -1,11 +1,12 @@
-import type { MindMapNode, MindMapFile } from '../types/mindmap';
+import type { MindMapNode, MindMapFile, MapTheme } from '../types/mindmap';
 
-export const exportJSON = (root: MindMapNode): void => {
+export const exportJSON = (root: MindMapNode, theme: MapTheme): void => {
   const file: MindMapFile = {
     version: '1.0',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     root,
+    theme,
   };
 
   const blob = new Blob([JSON.stringify(file, null, 2)], { type: 'application/json' });

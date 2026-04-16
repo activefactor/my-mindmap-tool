@@ -105,7 +105,9 @@ export const treeToFlow = (
   editingDraft: string,
   selectedId: string | null,
   dragTargetId: string | null,
-  callbacks: Omit<NodeData, 'node' | 'isRoot' | 'isEditing' | 'isDragTarget' | 'isSelected' | 'nodeWidth'>,
+  edgeColor: string,
+  buttonColor: string,
+  callbacks: Omit<NodeData, 'node' | 'isRoot' | 'isEditing' | 'isDragTarget' | 'isSelected' | 'nodeWidth' | 'buttonColor'>,
 ): { nodes: Node<NodeData>[]; edges: Edge[] } => {
   // 編集中ノードのテキストを draft で上書きしたツリーを作る（高さ推定に使用）
   const applyDraft = (node: MindMapNode): MindMapNode =>
@@ -146,6 +148,7 @@ export const treeToFlow = (
         isDragTarget: node.id === dragTargetId,
         isSelected: node.id === selectedId,
         nodeWidth: layout.width,
+        buttonColor,
         ...callbacks,
       },
     });
@@ -156,6 +159,7 @@ export const treeToFlow = (
         source: parentId,
         target: node.id,
         type: 'mindMapEdge',
+        data: { edgeColor },
       });
     }
 

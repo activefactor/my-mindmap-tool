@@ -13,6 +13,7 @@ export const MindMapEdge = ({
   sourcePosition,
   targetPosition,
   markerEnd,
+  data,
 }: EdgeProps) => {
   const [edgePath] = getBezierPath({
     sourceX,
@@ -30,6 +31,7 @@ export const MindMapEdge = ({
       fill="none"
       className="react-flow__edge-path"
       markerEnd={markerEnd}
+      style={data?.edgeColor ? { stroke: data.edgeColor } : undefined}
     />
   );
 };

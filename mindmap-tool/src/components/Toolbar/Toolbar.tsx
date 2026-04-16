@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react';
-import type { MindMapNode } from '../../types/mindmap';
+import type { MindMapNode, MapTheme } from '../../types/mindmap';
 import { exportJSON } from '../../utils/exportJSON';
 import { importJSON } from '../../utils/importJSON';
 import { exportText } from '../../utils/exportText';
@@ -102,19 +102,25 @@ interface ToolbarProps {
   root: MindMapNode;
   canUndo: boolean;
   canRedo: boolean;
+  edgeColor: string;
+  buttonColor: string;
   onUndo: () => void;
   onRedo: () => void;
   onNew: () => void;
-  onImport: (root: MindMapNode) => void;
+  onImport: (root: MindMapNode, theme?: MapTheme) => void;
   onFitView: () => void;
   onExportPNG: () => void;
   onExportPDF: () => void;
+  onEdgeColorChange: (color: string) => void;
+  onButtonColorChange: (color: string) => void;
 }
 
 export const Toolbar = ({
   root,
   canUndo,
   canRedo,
+  edgeColor,
+  buttonColor,
   onUndo,
   onRedo,
   onNew,
@@ -122,6 +128,8 @@ export const Toolbar = ({
   onFitView,
   onExportPNG,
   onExportPDF,
+  onEdgeColorChange,
+  onButtonColorChange,
 }: ToolbarProps) => {
   const jsonInputRef = useRef<HTMLInputElement>(null);
   const txtInputRef = useRef<HTMLInputElement>(null);
@@ -134,8 +142,13 @@ export const Toolbar = ({
   const handleImport = async (file: File, type: 'json' | 'txt') => {
     closeMenu();
     try {
-      const node = type === 'json' ? await importJSON(file) : await importText(file);
-      onImport(node);
+      if (type === 'json') {
+        const { root, theme } = await importJSON(file);
+        onImport(root, theme);
+      } else {
+        const node = await importText(file);
+        onImport(node);
+      }
     } catch (e) {
       alert((e as Error).message);
     }
@@ -183,7 +196,7 @@ export const Toolbar = ({
 
         {/* 保存 */}
         <DropMenu name="save" label="保存" openMenu={openMenu} onToggle={toggleMenu}>
-          <MenuItem label="JSONで保存" onClick={() => exportJSON(root)} onClose={closeMenu} />
+          <MenuItem label="JSONで保存" onClick={() => exportJSON(root, { edgeColor, buttonColor })} onClose={closeMenu} />
           <MenuItem label="テキストで保存" onClick={() => exportText(root)} onClose={closeMenu} />
         </DropMenu>
 
@@ -229,6 +242,67 @@ export const Toolbar = ({
         >
           全体表示
         </button>
+
+        {/* 区切り */}
+        <div style={{ width: '1px', height: '20px', background: 'var(--color-border-default)', margin: '0 var(--spacing-1)' }} />
+
+        {/* 線の色 */}
+        <label
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--spacing-2)',
+            fontSize: 'var(--font-size-sm)',
+            color: 'var(--color-text-secondary)',
+            cursor: 'pointer',
+            userSelect: 'none',
+          }}
+        >
+          線の色
+          <input
+            type="color"
+            value={edgeColor}
+            onChange={(e) => onEdgeColorChange(e.target.value)}
+            style={{
+              width: '24px',
+              height: '24px',
+              padding: '1px',
+              border: '1px solid var(--color-border-default)',
+              borderRadius: 'var(--radius-sm)',
+              cursor: 'pointer',
+              background: 'none',
+            }}
+          />
+        </label>
+
+        {/* ボタンの色 */}
+        <label
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--spacing-2)',
+            fontSize: 'var(--font-size-sm)',
+            color: 'var(--color-text-secondary)',
+            cursor: 'pointer',
+            userSelect: 'none',
+          }}
+        >
+          開閉ボタン色
+          <input
+            type="color"
+            value={buttonColor}
+            onChange={(e) => onButtonColorChange(e.target.value)}
+            style={{
+              width: '24px',
+              height: '24px',
+              padding: '1px',
+              border: '1px solid var(--color-border-default)',
+              borderRadius: 'var(--radius-sm)',
+              cursor: 'pointer',
+              background: 'none',
+            }}
+          />
+        </label>
       </div>
 
       {/* 隠しファイル入力 */}

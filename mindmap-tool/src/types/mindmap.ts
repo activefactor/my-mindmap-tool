@@ -7,11 +7,17 @@ export interface MindMapNode {
   collapsed: boolean;
 }
 
+export interface MapTheme {
+  edgeColor: string;
+  buttonColor: string;
+}
+
 export interface MindMapFile {
   version: string;
   createdAt: string;
   updatedAt: string;
   root: MindMapNode;
+  theme?: MapTheme;
 }
 
 // React Flow 用のノードデータ
@@ -22,6 +28,7 @@ export interface NodeData {
   isDragTarget: boolean;
   isSelected: boolean;
   nodeWidth: number;
+  buttonColor: string;
   onStartEdit: (id: string) => void;
   onCommitEdit: (id: string, text: string) => void;
   onCancelEdit: () => void;

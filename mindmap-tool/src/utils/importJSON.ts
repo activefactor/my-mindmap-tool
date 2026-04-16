@@ -1,4 +1,4 @@
-import type { MindMapNode, MindMapFile } from '../types/mindmap';
+import type { MindMapNode, MindMapFile, MapTheme } from '../types/mindmap';
 import { generateId } from './generateId';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
@@ -27,7 +27,7 @@ export const validateAndNormalizeNode = (node: unknown, depth: number): MindMapN
   };
 };
 
-export const importJSON = (file: File): Promise<MindMapNode> => {
+export const importJSON = (file: File): Promise<{ root: MindMapNode; theme?: MapTheme }> => {
   return new Promise((resolve, reject) => {
     if (file.size > MAX_FILE_SIZE) {
       reject(new Error('ファイルサイズが上限（5MB）を超えています。'));
@@ -44,20 +44,31 @@ export const importJSON = (file: File): Promise<MindMapNode> => {
         if (typeof parsed !== 'object' || parsed === null) {
           throw new Error('JSONファイルの形式が不正です。');
         }
-        const file = parsed as Record<string, unknown>;
+        const fileObj = parsed as Record<string, unknown>;
 
-        if (typeof file.version !== 'string') {
+        if (typeof fileObj.version !== 'string') {
           throw new Error('version フィールドがありません。');
         }
-        if (!SUPPORTED_VERSIONS.includes(file.version)) {
-          throw new Error(`未対応のバージョンです（${file.version}）。対応バージョン: ${SUPPORTED_VERSIONS.join(', ')}`);
+        if (!SUPPORTED_VERSIONS.includes(fileObj.version)) {
+          throw new Error(`未対応のバージョンです（${fileObj.version}）。対応バージョン: ${SUPPORTED_VERSIONS.join(', ')}`);
         }
-        if (!('root' in file)) {
+        if (!('root' in fileObj)) {
           throw new Error('root フィールドがありません。');
         }
 
         const root = validateAndNormalizeNode((parsed as MindMapFile).root, 0);
-        resolve(root);
+
+        // theme フィールドの任意読み込み
+        let theme: MapTheme | undefined;
+        const t = fileObj.theme;
+        if (typeof t === 'object' && t !== null) {
+          const th = t as Record<string, unknown>;
+          if (typeof th.edgeColor === 'string' && typeof th.buttonColor === 'string') {
+            theme = { edgeColor: th.edgeColor, buttonColor: th.buttonColor };
+          }
+        }
+
+        resolve({ root, theme });
       } catch (err) {
         reject(new Error(`JSONの読み込みに失敗しました: ${(err as Error).message}`));
       }
