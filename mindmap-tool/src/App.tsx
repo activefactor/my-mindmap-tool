@@ -36,8 +36,7 @@ const AppInner = () => {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [contextMenu, setContextMenu] = useState<ContextMenuState | null>(null);
-  const [edgeColor, setEdgeColor] = useState('#9CA3AF');
-  const [buttonColor, setButtonColor] = useState('#9CA3AF');
+  const [themeColor, setThemeColor] = useState('#9CA3AF');
   const pendingFocusId = useRef<string | null>(null);
 
   useAutoSave(current);
@@ -100,8 +99,7 @@ const AppInner = () => {
     setSelectedId(null);
     setEditingId(null);
     if (theme) {
-      setEdgeColor(theme.edgeColor);
-      setButtonColor(theme.buttonColor);
+      setThemeColor(theme.edgeColor);
     }
     setTimeout(() => fitView({ padding: 0.2 }), 100);
   }, [reset, fitView]);
@@ -183,8 +181,7 @@ const AppInner = () => {
         root={current}
         canUndo={canUndo}
         canRedo={canRedo}
-        edgeColor={edgeColor}
-        buttonColor={buttonColor}
+        themeColor={themeColor}
         onUndo={undo}
         onRedo={redo}
         onNew={handleNew}
@@ -192,8 +189,7 @@ const AppInner = () => {
         onFitView={handleFitView}
         onExportPNG={handleExportPNG}
         onExportPDF={handleExportPDF}
-        onEdgeColorChange={setEdgeColor}
-        onButtonColorChange={setButtonColor}
+        onThemeColorChange={setThemeColor}
       />
 
       <div style={{ flex: 1, position: 'relative' }}>
@@ -201,8 +197,8 @@ const AppInner = () => {
           root={current}
           selectedId={selectedId}
           editingId={editingId}
-          edgeColor={edgeColor}
-          buttonColor={buttonColor}
+          edgeColor={themeColor}
+          buttonColor={themeColor}
           onSelect={setSelectedId}
           onStartEdit={handleStartEdit}
           onCommitEdit={handleCommitEdit}

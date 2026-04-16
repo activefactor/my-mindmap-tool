@@ -102,8 +102,7 @@ interface ToolbarProps {
   root: MindMapNode;
   canUndo: boolean;
   canRedo: boolean;
-  edgeColor: string;
-  buttonColor: string;
+  themeColor: string;
   onUndo: () => void;
   onRedo: () => void;
   onNew: () => void;
@@ -111,16 +110,14 @@ interface ToolbarProps {
   onFitView: () => void;
   onExportPNG: () => void;
   onExportPDF: () => void;
-  onEdgeColorChange: (color: string) => void;
-  onButtonColorChange: (color: string) => void;
+  onThemeColorChange: (color: string) => void;
 }
 
 export const Toolbar = ({
   root,
   canUndo,
   canRedo,
-  edgeColor,
-  buttonColor,
+  themeColor,
   onUndo,
   onRedo,
   onNew,
@@ -128,8 +125,7 @@ export const Toolbar = ({
   onFitView,
   onExportPNG,
   onExportPDF,
-  onEdgeColorChange,
-  onButtonColorChange,
+  onThemeColorChange,
 }: ToolbarProps) => {
   const jsonInputRef = useRef<HTMLInputElement>(null);
   const txtInputRef = useRef<HTMLInputElement>(null);
@@ -196,7 +192,7 @@ export const Toolbar = ({
 
         {/* 保存 */}
         <DropMenu name="save" label="保存" openMenu={openMenu} onToggle={toggleMenu}>
-          <MenuItem label="JSONで保存" onClick={() => exportJSON(root, { edgeColor, buttonColor })} onClose={closeMenu} />
+          <MenuItem label="JSONで保存" onClick={() => exportJSON(root, { edgeColor: themeColor, buttonColor: themeColor })} onClose={closeMenu} />
           <MenuItem label="テキストで保存" onClick={() => exportText(root)} onClose={closeMenu} />
         </DropMenu>
 
@@ -246,7 +242,7 @@ export const Toolbar = ({
         {/* 区切り */}
         <div style={{ width: '1px', height: '20px', background: 'var(--color-border-default)', margin: '0 var(--spacing-1)' }} />
 
-        {/* 線の色 */}
+        {/* テーマカラー（線・開閉ボタン共通） */}
         <label
           style={{
             display: 'flex',
@@ -258,40 +254,11 @@ export const Toolbar = ({
             userSelect: 'none',
           }}
         >
-          線の色
+          カラー
           <input
             type="color"
-            value={edgeColor}
-            onChange={(e) => onEdgeColorChange(e.target.value)}
-            style={{
-              width: '24px',
-              height: '24px',
-              padding: '1px',
-              border: '1px solid var(--color-border-default)',
-              borderRadius: 'var(--radius-sm)',
-              cursor: 'pointer',
-              background: 'none',
-            }}
-          />
-        </label>
-
-        {/* ボタンの色 */}
-        <label
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 'var(--spacing-2)',
-            fontSize: 'var(--font-size-sm)',
-            color: 'var(--color-text-secondary)',
-            cursor: 'pointer',
-            userSelect: 'none',
-          }}
-        >
-          開閉ボタン色
-          <input
-            type="color"
-            value={buttonColor}
-            onChange={(e) => onButtonColorChange(e.target.value)}
+            value={themeColor}
+            onChange={(e) => onThemeColorChange(e.target.value)}
             style={{
               width: '24px',
               height: '24px',
