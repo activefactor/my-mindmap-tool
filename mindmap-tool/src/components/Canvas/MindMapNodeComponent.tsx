@@ -1,28 +1,7 @@
-import { memo, useRef, useEffect } from 'react';
+import { memo } from 'react';
 import { Handle, Position } from 'reactflow';
 import type { NodeProps } from 'reactflow';
 import type { NodeData } from '../../types/mindmap';
-
-const MAX_TEXT_LENGTH = 500;
-
-/** textarea 内のキャレット位置をクリック座標から取得する（ブラウザ依存） */
-const getCaretOffsetFromPoint = (el: HTMLTextAreaElement, x: number, y: number): number => {
-  // Chrome / Safari
-  if ('caretRangeFromPoint' in document) {
-    const range = (document as Document & {
-      caretRangeFromPoint(x: number, y: number): Range | null;
-    }).caretRangeFromPoint(x, y);
-    if (range) return Math.min(range.startOffset, el.value.length);
-  }
-  // Firefox
-  if ('caretPositionFromPoint' in document) {
-    const pos = (document as Document & {
-      caretPositionFromPoint(x: number, y: number): { offsetNode: Node; offset: number } | null;
-    }).caretPositionFromPoint(x, y);
-    if (pos) return Math.min(pos.offset, el.value.length);
-  }
-  return el.value.length;
-};
 
 export const MindMapNodeComponent = memo(({ data }: NodeProps<NodeData>) => {
   const {
@@ -32,81 +11,14 @@ export const MindMapNodeComponent = memo(({ data }: NodeProps<NodeData>) => {
     isDragTarget,
     isSelected,
     nodeWidth,
+    nodeHeight,
     buttonColor,
     onStartEdit,
-    onCommitEdit,
-    onCancelEdit,
     onContextMenu,
     onToggleCollapse,
-    onDraftChange,
   } = data;
 
-  const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const isComposingRef = useRef(false);
-  // DOM値を直接管理するRef（controlled stateを使わずIMEを保護）
-  const draftRef = useRef(node.text);
-  // シングルクリックでの編集開始時にキャレット位置を保持
-  const pendingCaretPointRef = useRef<{ x: number; y: number } | null>(null);
-
-  // 編集開始時：DOM値をセット・フォーカス・キャレット配置・高さ初期化
-  useEffect(() => {
-    if (isEditing) {
-      draftRef.current = node.text;
-      const el = textareaRef.current;
-      if (!el) return;
-      el.value = node.text;
-      const point = pendingCaretPointRef.current;
-      pendingCaretPointRef.current = null;
-      setTimeout(() => {
-        el.focus();
-        if (point) {
-          // クリック座標からキャレット位置を特定して配置
-          const offset = getCaretOffsetFromPoint(el, point.x, point.y);
-          el.setSelectionRange(offset, offset);
-        } else {
-          // ダブルクリック等：末尾に配置
-          el.setSelectionRange(el.value.length, el.value.length);
-        }
-        el.style.height = 'auto';
-        el.style.height = `${el.scrollHeight}px`;
-      }, 0);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isEditing]);
-
-  // nodeWidth 変更後に textarea 高さを再計算（幅変化後の折り返し行数変化に対応）
-  useEffect(() => {
-    if (!isEditing) return;
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = 'auto';
-    el.style.height = `${el.scrollHeight}px`;
-  }, [nodeWidth, isEditing]);
-
-  const hasChildren = node.children.length > 1;
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter') {
-      if (e.nativeEvent.isComposing) return;
-      if (e.shiftKey) return;
-      e.preventDefault();
-      onCommitEdit(node.id, draftRef.current);
-    }
-    if (e.key === 'Escape') { onCancelEdit(); }
-    e.stopPropagation();
-  };
-
-  const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    const value = e.target.value;
-    draftRef.current = value;
-    // 高さは常に更新（直接DOM操作なのでIMEに影響しない）
-    e.target.style.height = 'auto';
-    e.target.style.height = `${e.target.scrollHeight}px`;
-    // レイアウト（幅）更新は変換確定後のみ（React再レンダリングでIMEが壊れるのを防ぐ）
-    if (!isComposingRef.current) {
-      onDraftChange(node.id, value);
-    }
-  };
+  const hasChildren = node.children.length > 0;
 
   // ---- スタイル計算 ----
   const isBoxVisible = isRoot || isEditing || isSelected || isDragTarget;
@@ -145,24 +57,23 @@ export const MindMapNodeComponent = memo(({ data }: NodeProps<NodeData>) => {
     <div
       onContextMenu={(e) => onContextMenu(e, node.id)}
       onClick={() => {
-        // 選択済みノードへのシングルクリックで編集開始（クリック位置をキャレットに）
+        // 選択済みノードへのシングルクリックで編集開始
         if (isSelected && !isEditing) {
           onStartEdit(node.id);
         }
       }}
-      onDoubleClick={(e) => {
+      onDoubleClick={() => {
         if (!isEditing) {
-          // ダブルクリック：クリック座標を保存してから編集開始
-          pendingCaretPointRef.current = { x: e.clientX, y: e.clientY };
           onStartEdit(node.id);
         }
       }}
       style={{
         width: `${nodeWidth}px`,
+        height: `${nodeHeight}px`,
         background: bgColor,
         border: `${borderWidth} solid ${borderColor}`,
         borderRadius: isRoot ? 'var(--radius-lg)' : 'var(--radius-md)',
-        boxShadow: ringStyle,
+        boxShadow: isEditing ? 'none' : ringStyle, // 編集中は FloatingEditor がボーダーを担当
         padding: isRoot
           ? 'var(--spacing-3) var(--spacing-6)'
           : 'var(--spacing-2) var(--spacing-4)',
@@ -177,69 +88,27 @@ export const MindMapNodeComponent = memo(({ data }: NodeProps<NodeData>) => {
         userSelect: 'none',
         transform: isDragTarget ? 'scale(1.04)' : 'scale(1)',
         boxSizing: 'border-box',
+        // 編集中は透明化して FloatingEditor を重ねて表示
+        opacity: isEditing ? 0 : 1,
       }}
     >
       {!isRoot && (
         <Handle type="target" position={Position.Left} style={{ opacity: 0 }} />
       )}
 
-      {isEditing ? (
-        // uncontrolled textarea: value prop なし
-        // React の再レンダリングが DOM 値を上書きしないため IME が正常動作する
-        <textarea
-          ref={textareaRef}
-          onChange={handleInputChange}
-          onKeyDown={handleKeyDown}
-          onCompositionStart={() => { isComposingRef.current = true; }}
-          onCompositionEnd={() => {
-            isComposingRef.current = false;
-            // 変換確定後に DOM から最新値を取得して高さ・レイアウトを更新
-            const el = textareaRef.current;
-            if (!el) return;
-            draftRef.current = el.value;
-            el.style.height = 'auto';
-            el.style.height = `${el.scrollHeight}px`;
-            onDraftChange(node.id, el.value);
-          }}
-          onBlur={() => {
-            if (isComposingRef.current) return;
-            onCommitEdit(node.id, draftRef.current);
-          }}
-          maxLength={MAX_TEXT_LENGTH}
-          rows={1}
-          style={{
-            font: 'inherit',
-            fontSize: isRoot ? 'var(--font-size-xl)' : 'var(--font-size-base)',
-            fontWeight: isRoot ? 'var(--font-weight-bold)' : 'var(--font-weight-normal)',
-            color: isRoot ? 'var(--color-text-on-primary)' : 'var(--color-text-primary)',
-            background: 'transparent',
-            border: 'none',
-            outline: 'none',
-            width: '100%',
-            lineHeight: 'var(--line-height-base)',
-            resize: 'none',
-            overflow: 'hidden',
-            padding: 0,
-            margin: 0,
-            display: 'block',
-            wordBreak: 'break-all',
-          }}
-        />
-      ) : (
-        <span
-          style={{
-            fontSize: isRoot ? 'var(--font-size-xl)' : 'var(--font-size-base)',
-            fontWeight: isRoot ? 'var(--font-weight-bold)' : 'var(--font-weight-normal)',
-            color: isRoot ? 'var(--color-text-on-primary)' : 'var(--color-text-primary)',
-            lineHeight: 'var(--line-height-base)',
-            whiteSpace: 'pre-wrap',
-            wordBreak: 'break-word',
-            display: 'block',
-          }}
-        >
-          {node.text}
-        </span>
-      )}
+      <span
+        style={{
+          fontSize: isRoot ? 'var(--font-size-xl)' : 'var(--font-size-base)',
+          fontWeight: isRoot ? 'var(--font-weight-bold)' : 'var(--font-weight-normal)',
+          color: isRoot ? 'var(--color-text-on-primary)' : 'var(--color-text-primary)',
+          lineHeight: 'var(--line-height-base)',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+          display: 'block',
+        }}
+      >
+        {node.text}
+      </span>
 
       {hasChildren && (
         <button

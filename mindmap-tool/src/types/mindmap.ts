@@ -28,13 +28,11 @@ export interface NodeData {
   isDragTarget: boolean;
   isSelected: boolean;
   nodeWidth: number;
+  nodeHeight: number;
   buttonColor: string;
   onStartEdit: (id: string) => void;
-  onCommitEdit: (id: string, text: string) => void;
-  onCancelEdit: () => void;
   onContextMenu: (e: React.MouseEvent, id: string) => void;
   onToggleCollapse: (id: string) => void;
-  onDraftChange: (id: string, text: string) => void;
 }
 
 // 右クリックメニューの状態

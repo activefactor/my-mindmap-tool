@@ -10,6 +10,7 @@ interface KeyboardHandlers {
   onFitView: () => void;
   onSave: () => void;
   onCopy: () => void;
+  onCopyForApp: () => void;
   onCut: () => void;
   onPaste: () => void;
   isEditing: boolean;
@@ -25,6 +26,7 @@ export const useKeyboard = ({
   onFitView,
   onSave,
   onCopy,
+  onCopyForApp,
   onCut,
   onPaste,
   isEditing,
@@ -40,6 +42,7 @@ export const useKeyboard = ({
       if (ctrl && e.key === 'Z' && e.shiftKey) { e.preventDefault(); onRedo(); return; }
       if (ctrl && e.shiftKey && e.key === 'z') { e.preventDefault(); onRedo(); return; }
       if (ctrl && e.key === 's') { e.preventDefault(); onSave(); return; }
+      if (ctrl && e.shiftKey && e.key.toLowerCase() === 'c') { e.preventDefault(); onCopyForApp(); return; }
       if (ctrl && e.key === 'c') { e.preventDefault(); onCopy(); return; }
       if (ctrl && e.key === 'x') { e.preventDefault(); onCut(); return; }
       if (ctrl && e.key === 'v') { e.preventDefault(); onPaste(); return; }
@@ -53,5 +56,5 @@ export const useKeyboard = ({
 
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
-  }, [isEditing, onUndo, onRedo, onAddChild, onAddSibling, onDelete, onStartEdit, onFitView, onSave, onCopy, onCut, onPaste]);
+  }, [isEditing, onUndo, onRedo, onAddChild, onAddSibling, onDelete, onStartEdit, onFitView, onSave, onCopy, onCopyForApp, onCut, onPaste]);
 };

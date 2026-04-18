@@ -14,6 +14,7 @@ import type { MindMapNode, ContextMenuState, MapTheme } from './types/mindmap';
 import { generateId } from './utils/generateId';
 import { nodeToText } from './utils/exportText';
 import { parseIndentText } from './utils/importText';
+import { nodeToClipboardJSON, parseClipboardJSON } from './utils/clipboardNode';
 import { exportPNG } from './utils/exportPNG';
 import { exportPDF } from './utils/exportPDF';
 
@@ -25,6 +26,9 @@ const createInitialRoot = (): MindMapNode => ({
 });
 
 const loadInitial = (): MindMapNode => loadFromStorage() ?? createInitialRoot();
+
+const findNodeById = (node: MindMapNode, id: string): MindMapNode | null =>
+  node.id === id ? node : node.children.map((child) => findNodeById(child, id)).find(Boolean) ?? null;
 
 // ReactFlow の fitView は Provider 内でしか使えないため内部コンポーネントに分離
 const AppInner = () => {
@@ -126,24 +130,28 @@ const AppInner = () => {
   // --- クリップボードコピー ---
   const handleCopy = useCallback(() => {
     if (!selectedId) return;
-    const find = (node: MindMapNode): MindMapNode | null =>
-      node.id === selectedId ? node : node.children.map(find).find(Boolean) ?? null;
-    const target = find(current);
+    const target = findNodeById(current, selectedId);
     if (!target) return;
     navigator.clipboard.writeText(nodeToText(target)).catch(() => {/* コピー失敗は無視 */});
   }, [selectedId, current]);
 
-  // --- カット ---
+  // --- アプリ用コピー（JSON） ---
+  const handleCopyForApp = useCallback(() => {
+    if (!selectedId) return;
+    const target = findNodeById(current, selectedId);
+    if (!target) return;
+    navigator.clipboard.writeText(nodeToClipboardJSON(target)).catch(() => {/* コピー失敗は無視 */});
+  }, [selectedId, current]);
+
+  // --- カット（アプリ用JSONで保持してから削除） ---
   const handleCut = useCallback(() => {
     if (!selectedId || selectedId === current.id) return;
-    const find = (node: MindMapNode): MindMapNode | null =>
-      node.id === selectedId ? node : node.children.map(find).find(Boolean) ?? null;
-    const target = find(current);
+    const target = findNodeById(current, selectedId);
     if (!target) return;
-    navigator.clipboard.writeText(nodeToText(target)).then(() => {
+    navigator.clipboard.writeText(nodeToClipboardJSON(target)).then(() => {
       handleDelete(selectedId);
     }).catch(() => {/* クリップボード書き込み失敗は無視 */});
-  }, [selectedId, current, deleteNode]);
+  }, [selectedId, current, handleDelete]);
 
   // --- ペースト ---
   const handlePaste = useCallback(async () => {
@@ -151,7 +159,7 @@ const AppInner = () => {
     try {
       const text = await navigator.clipboard.readText();
       if (text.length > 1 * 1024 * 1024) return; // 1MB超は無視
-      const parsed = parseIndentText(text);
+      const parsed = parseClipboardJSON(text) ?? parseIndentText(text);
       if (!parsed) return;
       pasteNode(targetId, parsed);
     } catch {/* クリップボード読み取り失敗は無視 */}
@@ -168,6 +176,7 @@ const AppInner = () => {
     onFitView: handleFitView,
     onSave: () => {},
     onCopy: handleCopy,
+    onCopyForApp: handleCopyForApp,
     onCut: handleCut,
     onPaste: handlePaste,
     isEditing: editingId !== null,
