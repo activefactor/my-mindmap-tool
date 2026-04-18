@@ -4,7 +4,6 @@ import type { MindMapNode, NodeData } from '../types/mindmap';
 // ============================================================
 // レイアウト定数 — DESIGN.md / 基本設計書のレイアウト設計と対応
 // ============================================================
-const NODE_WIDTH = 160;         // フォールバック用（幅推定のキャップには使わない）
 const ROOT_NODE_WIDTH = 200;    // ルートノードの固定幅
 const H_GAP = 44;               // ノード右端〜子ノード左端の水平余白
 const V_GAP = 20;               // ノード間の垂直余白
@@ -12,40 +11,72 @@ const LINE_HEIGHT = 22;         // 14px フォントの行高
 const ROOT_LINE_HEIGHT = 28;    // 20px フォントの行高（ルート）
 const PADDING_V = 16;           // 上下パディング合計（8px × 2）
 const ROOT_PADDING_V = 24;      // ルート上下パディング合計（12px × 2）
-const CHAR_WIDTH = 14;          // 1文字あたりの推定幅（Noto Sans JP 14px ≈ 14px/字）
+const CHAR_WIDTH_WIDE = 14;     // 全角文字の推定幅（ひらがな・カタカナ・漢字等）
+const CHAR_WIDTH_NARROW = 8;    // 半角文字の推定幅（英数字・ASCII）
 const PADDING_H = 32;           // 水平パディング合計（16px × 2）
-const ESTIMATE_BUFFER = 14;     // 幅推定バッファ（フォントメトリクスの誤差で最後の文字が折り返されるのを防ぐ）
-const MIN_NODE_WIDTH = 74;      // ノードの最小幅（日本語2文字相当: 2×14+32+14）
-const ROOT_CHARS_PER_LINE = 10; // ルートノードの折り返し文字数（固定幅のため定数）
+const ROOT_PADDING_H = 48;      // ルート水平パディング合計（spacing-6: 24px × 2）
+const ESTIMATE_BUFFER = 10;     // 幅推定バッファ（フォントメトリクスの誤差対策）
+const MIN_NODE_WIDTH = 60;      // ノードの最小幅
 const MIN_HEIGHT = 40;
+
+/** CJK・全角文字かどうかを判定 */
+const isWideChar = (char: string): boolean => {
+  const code = char.codePointAt(0) ?? 0;
+  return (
+    (code >= 0x3000 && code <= 0x9FFF) || // CJK Symbols〜CJK Unified Ideographs（ひらがな・カタカナ・漢字を含む）
+    (code >= 0xAC00 && code <= 0xD7AF) || // Hangul Syllables
+    (code >= 0xF900 && code <= 0xFAFF) || // CJK Compatibility Ideographs
+    (code >= 0xFF01 && code <= 0xFF60) || // Fullwidth Forms
+    (code >= 0xFFE0 && code <= 0xFFE6)    // Fullwidth Signs
+  );
+};
+
+/** 1行の推定ピクセル幅を計算（全角・半角を区別） */
+const estimateLinePixelWidth = (line: string): number => {
+  let width = 0;
+  for (const char of line) {
+    width += isWideChar(char) ? CHAR_WIDTH_WIDE : CHAR_WIDTH_NARROW;
+  }
+  return width;
+};
 
 /**
  * テキストからノードの推定幅を計算する。
- * 改行がある場合は最長行の幅を使用。上限なし（テキストに合わせて自由に伸びる）。
+ * 改行がある場合は最長行の幅を使用。全角・半角を区別して計算。
  */
 const estimateWidth = (text: string, isRoot: boolean): number => {
   if (isRoot) return ROOT_NODE_WIDTH;
   if (!text) return MIN_NODE_WIDTH;
-  const maxLineLen = text.split('\n').reduce((max, line) => Math.max(max, line.length), 0);
-  return Math.max(maxLineLen * CHAR_WIDTH + PADDING_H + ESTIMATE_BUFFER, MIN_NODE_WIDTH);
+  const maxLineWidth = text.split('\n').reduce(
+    (max, line) => Math.max(max, estimateLinePixelWidth(line)),
+    0,
+  );
+  return Math.max(maxLineWidth + PADDING_H + ESTIMATE_BUFFER, MIN_NODE_WIDTH);
 };
 
 /**
  * テキストからノードの推定高さを計算する。
- * 改行文字と、推定幅に基づく折り返しを両方考慮する。
+ * 改行文字と、推定幅に基づく折り返しを両方考慮。全角・半角を区別して計算。
  */
 const estimateHeight = (text: string, isRoot: boolean): number => {
   if (!text) return MIN_HEIGHT;
   const lineH = isRoot ? ROOT_LINE_HEIGHT : LINE_HEIGHT;
   const paddingV = isRoot ? ROOT_PADDING_V : PADDING_V;
+
   if (isRoot) {
-    const lines = Math.max(1, Math.ceil(text.length / ROOT_CHARS_PER_LINE));
-    return Math.max(MIN_HEIGHT, lines * lineH + paddingV);
+    const textAreaWidth = Math.max(1, ROOT_NODE_WIDTH - ROOT_PADDING_H);
+    const totalLines = text.split('\n').reduce((sum, line) => {
+      const lineWidth = estimateLinePixelWidth(line);
+      return sum + Math.max(1, Math.ceil(lineWidth / textAreaWidth));
+    }, 0);
+    return Math.max(MIN_HEIGHT, totalLines * lineH + paddingV);
   }
-  const width = estimateWidth(text, false);
-  const charsPerLine = Math.max(1, Math.floor((width - PADDING_H) / CHAR_WIDTH));
+
+  const nodeWidth = estimateWidth(text, false);
+  const textAreaWidth = Math.max(1, nodeWidth - PADDING_H);
   const totalLines = text.split('\n').reduce((sum, line) => {
-    return sum + Math.max(1, Math.ceil(line.length / charsPerLine));
+    const lineWidth = estimateLinePixelWidth(line);
+    return sum + Math.max(1, Math.ceil(lineWidth / textAreaWidth));
   }, 0);
   return Math.max(MIN_HEIGHT, totalLines * lineH + paddingV);
 };
@@ -134,7 +165,7 @@ export const treeToFlow = (
   const edges: Edge[] = [];
 
   const traverse = (node: MindMapNode, parentId: string | null) => {
-    const layout = posMap.get(node.id) ?? { x: 0, y: 0, height: MIN_HEIGHT, width: NODE_WIDTH };
+    const layout = posMap.get(node.id) ?? { x: 0, y: 0, height: MIN_HEIGHT, width: MIN_NODE_WIDTH };
     const originalNode = originalMap.get(node.id) ?? node;
 
     nodes.push({

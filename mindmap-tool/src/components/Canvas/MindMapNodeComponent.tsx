@@ -5,6 +5,25 @@ import type { NodeData } from '../../types/mindmap';
 
 const MAX_TEXT_LENGTH = 500;
 
+/** textarea 内のキャレット位置をクリック座標から取得する（ブラウザ依存） */
+const getCaretOffsetFromPoint = (el: HTMLTextAreaElement, x: number, y: number): number => {
+  // Chrome / Safari
+  if ('caretRangeFromPoint' in document) {
+    const range = (document as Document & {
+      caretRangeFromPoint(x: number, y: number): Range | null;
+    }).caretRangeFromPoint(x, y);
+    if (range) return Math.min(range.startOffset, el.value.length);
+  }
+  // Firefox
+  if ('caretPositionFromPoint' in document) {
+    const pos = (document as Document & {
+      caretPositionFromPoint(x: number, y: number): { offsetNode: Node; offset: number } | null;
+    }).caretPositionFromPoint(x, y);
+    if (pos) return Math.min(pos.offset, el.value.length);
+  }
+  return el.value.length;
+};
+
 export const MindMapNodeComponent = memo(({ data }: NodeProps<NodeData>) => {
   const {
     node,
@@ -26,17 +45,28 @@ export const MindMapNodeComponent = memo(({ data }: NodeProps<NodeData>) => {
   const isComposingRef = useRef(false);
   // DOM値を直接管理するRef（controlled stateを使わずIMEを保護）
   const draftRef = useRef(node.text);
+  // シングルクリックでの編集開始時にキャレット位置を保持
+  const pendingCaretPointRef = useRef<{ x: number; y: number } | null>(null);
 
-  // 編集開始時：DOM値をセット・フォーカス・高さ初期化
+  // 編集開始時：DOM値をセット・フォーカス・キャレット配置・高さ初期化
   useEffect(() => {
     if (isEditing) {
       draftRef.current = node.text;
       const el = textareaRef.current;
       if (!el) return;
       el.value = node.text;
+      const point = pendingCaretPointRef.current;
+      pendingCaretPointRef.current = null;
       setTimeout(() => {
         el.focus();
-        el.select();
+        if (point) {
+          // クリック座標からキャレット位置を特定して配置
+          const offset = getCaretOffsetFromPoint(el, point.x, point.y);
+          el.setSelectionRange(offset, offset);
+        } else {
+          // ダブルクリック等：末尾に配置
+          el.setSelectionRange(el.value.length, el.value.length);
+        }
         el.style.height = 'auto';
         el.style.height = `${el.scrollHeight}px`;
       }, 0);
@@ -44,7 +74,7 @@ export const MindMapNodeComponent = memo(({ data }: NodeProps<NodeData>) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditing]);
 
-  // nodeWidth 変更後に textarea 高さを再計算
+  // nodeWidth 変更後に textarea 高さを再計算（幅変化後の折り返し行数変化に対応）
   useEffect(() => {
     if (!isEditing) return;
     const el = textareaRef.current;
@@ -69,11 +99,13 @@ export const MindMapNodeComponent = memo(({ data }: NodeProps<NodeData>) => {
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
     draftRef.current = value;
-    // 変換中はレイアウト更新・高さ調整をスキップ（IMEウィンドウ位置を安定させる）
-    if (isComposingRef.current) return;
-    onDraftChange(node.id, value);
+    // 高さは常に更新（直接DOM操作なのでIMEに影響しない）
     e.target.style.height = 'auto';
     e.target.style.height = `${e.target.scrollHeight}px`;
+    // レイアウト（幅）更新は変換確定後のみ（React再レンダリングでIMEが壊れるのを防ぐ）
+    if (!isComposingRef.current) {
+      onDraftChange(node.id, value);
+    }
   };
 
   // ---- スタイル計算 ----
@@ -112,7 +144,19 @@ export const MindMapNodeComponent = memo(({ data }: NodeProps<NodeData>) => {
   return (
     <div
       onContextMenu={(e) => onContextMenu(e, node.id)}
-      onDoubleClick={() => onStartEdit(node.id)}
+      onClick={() => {
+        // 選択済みノードへのシングルクリックで編集開始（クリック位置をキャレットに）
+        if (isSelected && !isEditing) {
+          onStartEdit(node.id);
+        }
+      }}
+      onDoubleClick={(e) => {
+        if (!isEditing) {
+          // ダブルクリック：クリック座標を保存してから編集開始
+          pendingCaretPointRef.current = { x: e.clientX, y: e.clientY };
+          onStartEdit(node.id);
+        }
+      }}
       style={{
         width: `${nodeWidth}px`,
         background: bgColor,
@@ -140,7 +184,7 @@ export const MindMapNodeComponent = memo(({ data }: NodeProps<NodeData>) => {
       )}
 
       {isEditing ? (
-        // uncontrolled textarea: value prop を持たせない
+        // uncontrolled textarea: value prop なし
         // React の再レンダリングが DOM 値を上書きしないため IME が正常動作する
         <textarea
           ref={textareaRef}
