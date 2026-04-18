@@ -7,6 +7,29 @@ const MAX_DEPTH = 50;
 const INDENT_SIZE = 4;
 const MAX_TEXT_LENGTH = 500; // importJSON.ts の MAX_TEXT_LENGTH と一致させること
 
+const unescapeNodeText = (text: string): string => {
+  let result = '';
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (char !== '\\' || i === text.length - 1) {
+      result += char;
+      continue;
+    }
+
+    const next = text[i + 1];
+    if (next === 'n') {
+      result += '\n';
+      i++;
+    } else if (next === '\\') {
+      result += '\\';
+      i++;
+    } else {
+      result += char;
+    }
+  }
+  return result;
+};
+
 export const importText = (file: File): Promise<MindMapNode> => {
   return new Promise((resolve, reject) => {
     if (file.size > MAX_FILE_SIZE) {
@@ -48,7 +71,7 @@ const _parseIndentText = (raw: string): MindMapNode => {
     const spaces = line.match(/^( *)/)?.[1].length ?? 0;
     const depth = Math.floor(spaces / INDENT_SIZE);
     if (depth > MAX_DEPTH) throw new Error('インデントの深さが上限（50階層）を超えています。');
-    const text = line.trim().slice(0, MAX_TEXT_LENGTH);
+    const text = unescapeNodeText(line.trim()).slice(0, MAX_TEXT_LENGTH);
     return { depth, text };
   });
 

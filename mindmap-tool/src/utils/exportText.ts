@@ -2,8 +2,11 @@ import type { MindMapNode } from '../types/mindmap';
 
 const INDENT = '    '; // スペース4つ
 
+const escapeNodeText = (text: string): string =>
+  text.replace(/\\/g, '\\\\').replace(/\r?\n/g, '\\n');
+
 const nodeToLines = (node: MindMapNode, depth: number): string[] => {
-  const lines: string[] = [INDENT.repeat(depth) + node.text];
+  const lines: string[] = [INDENT.repeat(depth) + escapeNodeText(node.text)];
   for (const child of node.children) {
     lines.push(...nodeToLines(child, depth + 1));
   }
