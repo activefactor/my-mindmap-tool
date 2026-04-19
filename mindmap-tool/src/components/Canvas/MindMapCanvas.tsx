@@ -34,6 +34,7 @@ interface MindMapCanvasProps {
   onContextMenu: (state: ContextMenuState) => void;
   onToggleCollapse: (id: string) => void;
   onMoveNode: (nodeId: string, newParentId: string) => void;
+  onAddChild: (id: string, text: string) => void;
 }
 
 // FloatingEditor をレンダリングする内部コンポーネント（useViewport が ReactFlow コンテキスト内で動作するため）
@@ -50,6 +51,7 @@ const CanvasInner = ({
   onContextMenu,
   onToggleCollapse,
   onMoveNode,
+  onAddChild,
   canvasWrapRef,
 }: MindMapCanvasProps & { canvasWrapRef: React.RefObject<HTMLDivElement | null> }) => {
   const { getNodes } = useReactFlow();
@@ -213,6 +215,7 @@ const CanvasInner = ({
             onCommit={onCommitEdit}
             onCancel={onCancelEdit}
             onDraftChange={handleDraftChange}
+            onAddChild={onAddChild}
           />
         );
       })()}

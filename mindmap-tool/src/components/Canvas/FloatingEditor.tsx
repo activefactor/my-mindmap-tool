@@ -28,6 +28,8 @@ interface FloatingEditorProps {
   onCommit: (id: string, text: string) => void;
   onCancel: () => void;
   onDraftChange: (id: string, text: string) => void;
+  /** Tab キー押下時: 現テキストを確定しつつ子ノードを作成する */
+  onAddChild: (id: string, text: string) => void;
 }
 
 export const FloatingEditor = ({
@@ -43,6 +45,7 @@ export const FloatingEditor = ({
   onCommit,
   onCancel,
   onDraftChange,
+  onAddChild,
 }: FloatingEditorProps) => {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -111,7 +114,13 @@ export const FloatingEditor = ({
     requestAnimationFrame(() => {
       updateWidth();
       el.focus();
-      el.setSelectionRange(el.value.length, el.value.length);
+      // 新規作成直後のノード（デフォルトテキスト）は全選択 → そのまま打ち替えられる
+      // 既存ノードの編集は末尾にカーソルを置く
+      if (node.text === '新しいノード') {
+        el.select();
+      } else {
+        el.setSelectionRange(el.value.length, el.value.length);
+      }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -122,6 +131,11 @@ export const FloatingEditor = ({
       if (e.shiftKey) return; // Shift+Enter は改行
       e.preventDefault();
       onCommit(node.id, draftRef.current);
+    }
+    if (e.key === 'Tab') {
+      if (e.nativeEvent.isComposing) return;
+      e.preventDefault(); // ブラウザのフォーカス移動を抑止
+      onAddChild(node.id, draftRef.current);
     }
     if (e.key === 'Escape') {
       onCancel();
