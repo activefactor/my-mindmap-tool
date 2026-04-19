@@ -35,7 +35,7 @@ const AppInner = () => {
   const { fitView } = useReactFlow();
 
   const { current, commit, undo, redo, reset, canUndo, canRedo } = useHistory(loadInitial());
-  const { addChild, addSibling, deleteNode, updateText, toggleCollapse, moveNode, pasteNode } = useMindMap(current, commit);
+  const { addChild, addSibling, deleteNode, updateText, toggleCollapse, moveNode, pasteNode, commitAndAddChild } = useMindMap(current, commit);
 
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -57,6 +57,15 @@ const AppInner = () => {
   }, [updateText]);
 
   const handleCancelEdit = useCallback(() => setEditingId(null), []);
+
+  // --- Tab キー: 編集中テキストを確定しつつ子ノードを追加 ---
+  const handleAddChildFromEdit = useCallback((editingNodeId: string, text: string) => {
+    const newId = commitAndAddChild(editingNodeId, text);
+    if (newId) {
+      setSelectedId(newId);
+      setEditingId(newId);
+    }
+  }, [commitAndAddChild]);
 
   // --- ノード追加（追加後に新ノードを編集モードに） ---
   // targetId を明示渡しすることで右クリックメニューの非同期state問題を回避
@@ -215,6 +224,7 @@ const AppInner = () => {
           onContextMenu={setContextMenu}
           onToggleCollapse={toggleCollapse}
           onMoveNode={moveNode}
+          onAddChild={handleAddChildFromEdit}
         />
 
         {contextMenu && (

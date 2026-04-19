@@ -130,5 +130,19 @@ export const useMindMap = (
     commit(next);
   }, [current, commit]);
 
-  return { addChild, addSibling, deleteNode, updateText, toggleCollapse, moveNode, getParent, pasteNode };
+  // テキスト確定 + 子ノード追加を1回の commit にまとめる（Tab キー用）
+  // → updateText → addChild の2段階 setState だと addChild が古い current を掴む問題を回避
+  const commitAndAddChild = useCallback((nodeId: string, text: string): string | null => {
+    const newChildId = generateId();
+    const newChild: MindMapNode = { id: newChildId, text: '新しいノード', children: [], collapsed: false };
+    const next = mapTree(current, (n) => {
+      if (n.id !== nodeId) return n;
+      const withText = text.trim() ? { ...n, text: text.trim() } : n;
+      return { ...withText, collapsed: false, children: [...withText.children, newChild] };
+    });
+    commit(next);
+    return newChildId;
+  }, [current, commit]);
+
+  return { addChild, addSibling, deleteNode, updateText, toggleCollapse, moveNode, getParent, pasteNode, commitAndAddChild };
 };
