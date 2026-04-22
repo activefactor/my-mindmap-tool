@@ -127,14 +127,14 @@ const AppInner = () => {
   const handleExportPNG = useCallback(async () => {
     fitView({ padding: 0.15 });
     await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
-    await exportPNG();
-  }, [fitView]);
+    await exportPNG(current.text);
+  }, [fitView, current.text]);
 
   const handleExportPDF = useCallback(async () => {
     fitView({ padding: 0.15 });
     await new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r())));
-    await exportPDF();
-  }, [fitView]);
+    await exportPDF(current.text);
+  }, [fitView, current.text]);
 
   // --- クリップボードコピー ---
   const handleCopy = useCallback(() => {

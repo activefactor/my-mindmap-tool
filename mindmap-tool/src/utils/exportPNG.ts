@@ -1,5 +1,6 @@
 import { toCanvas } from 'html-to-image';
 import { captureEdgesAsCanvas } from './exportUtils';
+import { buildFilename } from './filename';
 
 const PIXEL_RATIO = 2;
 
@@ -8,7 +9,7 @@ const PIXEL_RATIO = 2;
  * html-to-image（HTML ノード）と XMLSerializer（SVG エッジ）を合成する。
  * 呼び出し前に fitView() で全ノードを表示しておくこと。
  */
-export const exportPNG = async (): Promise<void> => {
+export const exportPNG = async (rootText: string): Promise<void> => {
   const flowEl     = document.querySelector<HTMLElement>('.react-flow');
   const viewportEl = document.querySelector<HTMLElement>('.react-flow__viewport');
   if (!flowEl || !viewportEl) return;
@@ -53,12 +54,6 @@ export const exportPNG = async (): Promise<void> => {
   const dataUrl = mainCanvas.toDataURL('image/png');
   const a = document.createElement('a');
   a.href     = dataUrl;
-  a.download = `mindmap_${formatDate()}.png`;
+  a.download = buildFilename(rootText, 'png');
   a.click();
-};
-
-const formatDate = (): string => {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}_${pad(d.getHours())}${pad(d.getMinutes())}`;
 };
