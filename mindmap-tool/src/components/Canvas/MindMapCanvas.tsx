@@ -3,6 +3,8 @@ import ReactFlow, {
   Background,
   BackgroundVariant,
   Controls,
+  useEdgesState,
+  useNodesState,
   useReactFlow,
   useViewport,
 } from 'reactflow';
@@ -103,12 +105,25 @@ const CanvasInner = ({
     [onStartEdit, handleContextMenu, onToggleCollapse],
   );
 
-  const { nodes, edges } = useMemo(
+  // root / 編集状態などから ReactFlow 用の nodes/edges を算出（純粋関数）。
+  const computed = useMemo(
     () => treeToFlow(root, editingId, effectiveEditingDraft, selectedId, dragTargetId, edgeColor, buttonColor, callbacks),
     // layoutTick はスナップバック強制に使用
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [root, editingId, effectiveEditingDraft, selectedId, dragTargetId, edgeColor, buttonColor, callbacks, layoutTick],
   );
+
+  // ReactFlow の内部 store と props のズレを防ぐため、useNodesState 経由で明示的に同期する。
+  // 以前は `<ReactFlow nodes={computed.nodes}>` のように props 直接渡しだったが、その方式だと
+  // 内部 store の data が新しい props で上書きされないケース（特に同一 id ノードの data を入れ替える
+  // パターン）が発生し、編集 commit 後もノードに古いテキストが残る不具合が起きていた。
+  const [nodes, setNodes, onNodesChange] = useNodesState(computed.nodes);
+  const [edges, setEdges, onEdgesChange] = useEdgesState(computed.edges);
+
+  useEffect(() => {
+    setNodes(computed.nodes);
+    setEdges(computed.edges);
+  }, [computed.nodes, computed.edges, setNodes, setEdges]);
 
   // ドラッグ中: ドロップ候補ノードを検出してハイライト
   const handleNodeDrag = useCallback(
@@ -156,19 +171,22 @@ const CanvasInner = ({
     [dragTargetId, onMoveNode],
   );
 
-  // 編集中ノードの情報（FloatingEditor 表示用）
+  // 編集中ノードの情報（FloatingEditor 表示用）。
+  // 表示の最新性が重要なので state ではなく computed の方を引く（state は 1tick 遅れることがある）。
   const editingNode = useMemo(() => {
     if (!editingId) return null;
-    const rfNode = nodes.find((n) => n.id === editingId);
+    const rfNode = computed.nodes.find((n) => n.id === editingId);
     if (!rfNode) return null;
     return rfNode;
-  }, [editingId, nodes]);
+  }, [editingId, computed.nodes]);
 
   return (
     <>
       <ReactFlow
         nodes={nodes}
         edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
         nodeTypes={nodeTypes}
         edgeTypes={edgeTypes}
         onNodeClick={(_, node) => onSelect(node.id)}
@@ -212,10 +230,23 @@ const CanvasInner = ({
             vpY={viewport.y}
             canvasRect={canvasRect}
             nodeWidth={editingNodeData.nodeWidth}
-            onCommit={onCommitEdit}
-            onCancel={onCancelEdit}
+            onCommit={(id, text) => {
+              // commit と同時に editingDraft を即時クリア。
+              // useEffect 経由の遅延クリアだと、commit 後に走り得る
+              // input/composition 由来の onDraftChange で古い候補値が
+              // 再代入され、表示側に stale な text が描画されるレースを防ぐ。
+              setEditingDraft({ id: null, text: '' });
+              onCommitEdit(id, text);
+            }}
+            onCancel={() => {
+              setEditingDraft({ id: null, text: '' });
+              onCancelEdit();
+            }}
             onDraftChange={handleDraftChange}
-            onAddChild={onAddChild}
+            onAddChild={(id, text) => {
+              setEditingDraft({ id: null, text: '' });
+              onAddChild(id, text);
+            }}
           />
         );
       })()}
