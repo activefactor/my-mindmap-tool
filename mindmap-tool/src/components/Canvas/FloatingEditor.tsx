@@ -126,16 +126,28 @@ export const FloatingEditor = ({
   }, []);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // IME 中判定: e.nativeEvent.isComposing は環境（特に Mac の Google 日本語入力 /
+    // ことえり）によっては、変換確定の Enter 押下時点で既に false になっており、
+    // compositionend より前に keydown が走るケースがある。その場合 draftRef.current
+    // はまだ変換前のテキストのままで、誤って未確定文字で onCommit してしまう。
+    // isComposingRef (compositionstart→true / compositionend→false) と keyCode 229
+    // を併用して、より確実に IME 中を検出する。
+    const isIMEActive =
+      e.nativeEvent.isComposing ||
+      isComposingRef.current ||
+      e.keyCode === 229;
+
     if (e.key === 'Enter') {
-      if (e.nativeEvent.isComposing) return;
+      if (isIMEActive) return;
       if (e.shiftKey) return; // Shift+Enter は改行
       e.preventDefault();
-      onCommit(node.id, draftRef.current);
+      // draftRef ではなく DOM の最新値を読む（同期ずれに対する保険）
+      onCommit(node.id, e.currentTarget.value);
     }
     if (e.key === 'Tab') {
-      if (e.nativeEvent.isComposing) return;
+      if (isIMEActive) return;
       e.preventDefault(); // ブラウザのフォーカス移動を抑止
-      onAddChild(node.id, draftRef.current);
+      onAddChild(node.id, e.currentTarget.value);
     }
     if (e.key === 'Escape') {
       onCancel();
@@ -148,17 +160,26 @@ export const FloatingEditor = ({
     updateWidth();
   };
 
+  const handleCompositionStart = () => {
+    isComposingRef.current = true;
+  };
+
   const handleCompositionEnd = () => {
     isComposingRef.current = false;
     const el = textareaRef.current;
     if (!el) return;
     draftRef.current = el.value;
-    requestAnimationFrame(() => updateWidth());
+    // 即時に親へ draft を通知して editingDraft を最新化する。
+    // rAF 越しにすると、ユーザーが Enter を素早く押した場合に
+    // 「中間 IME 候補」が editingDraft に残ったまま commit が走り、
+    // 表示側に古い文字列が描画される race を引き起こすため。
+    updateWidth();
   };
 
   const handleBlur = () => {
     if (isComposingRef.current) return;
-    onCommit(node.id, draftRef.current);
+    const el = textareaRef.current;
+    onCommit(node.id, el ? el.value : draftRef.current);
   };
 
   // パディング（CSS変数と同値をズームスケールしてインラインで再現）
@@ -173,7 +194,7 @@ export const FloatingEditor = ({
       ref={textareaRef}
       onChange={handleChange}
       onKeyDown={handleKeyDown}
-      onCompositionStart={() => { isComposingRef.current = true; }}
+      onCompositionStart={handleCompositionStart}
       onCompositionEnd={handleCompositionEnd}
       onBlur={handleBlur}
       maxLength={MAX_TEXT_LENGTH}

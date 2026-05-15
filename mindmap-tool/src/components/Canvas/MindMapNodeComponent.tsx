@@ -97,6 +97,8 @@ export const MindMapNodeComponent = memo(({ data }: NodeProps<NodeData>) => {
       )}
 
       <span
+        translate="no"
+        className="notranslate"
         style={{
           fontSize: isRoot ? 'var(--font-size-xl)' : 'var(--font-size-base)',
           fontWeight: isRoot ? 'var(--font-weight-bold)' : 'var(--font-weight-normal)',
